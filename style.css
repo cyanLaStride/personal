@@ -1,6 +1,7 @@
 body {
     background-color: black;
     color: white;
+    height: 100%;
     margin: 2% 2%;
     /*width: fit-content;*/
     font-family: monospace;
@@ -29,4 +30,10 @@ h1 {
 h2 {
     font-size: 28px;
     color: #008282;
+}
+
+.topTitle {
+    display: flex;
+    height: 54px;
+    align-items: center;
 }
