@@ -138,15 +138,20 @@
 
   .navlink { color: var(--muted); padding: 8px 4px; }
   .navlink:hover { color: var(--text); }
-  .ugroup { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .ugroup { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .ugroup h2 { margin: 0; font-size: 17px; }
-  .urow { display: grid; grid-template-columns: minmax(0, 1.4fr) 132px minmax(0, 1fr) 44px; gap: 14px; align-items: center;
-          padding: 5px 8px; border-radius: 7px; }
-  .urow:hover { background: var(--panel); }
-  .urow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .urow .ty { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .urow .yr { color: var(--muted); text-align: right; }
-  @media (max-width: 700px) { .urow { grid-template-columns: minmax(0, 1fr) 110px 40px; } .urow .ty { display: none; } }
+  .ugrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .ugrid a { display: block; border-radius: 4.75% / 3.5%; transition: transform .12s; }
+  .ugrid a:hover { transform: translateY(-3px); }
+  .ugrid img, .ugrid .ph { width: 100%; height: auto; aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; display: block; }
+  .ufilters { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin: 0 0 12px; }
+  .ufilters .lbl { color: var(--muted); margin-right: 4px; }
+  .chips { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .chip { min-width: 34px; padding: 4px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+          cursor: pointer; color: var(--text); display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+  .chip .ms { width: 18px; height: 18px; }
+  .chip[aria-pressed="true"] { border-color: var(--accent); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--accent); }
+  .chip.clear { color: var(--muted); border-style: dashed; }
   .deckform { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; }
   .deckform summary { cursor: pointer; font-weight: 600; }
   .deckform textarea { display: block; width: 100%; height: 260px; margin: 10px 0; padding: 10px; resize: vertical;
@@ -224,7 +229,8 @@ const sideRows = i => sides[i].filter(allowed).map(p => p[0] === i
 const twins = CARDS.map(() => []);
 for (const g of SAME) for (const i of g) twins[i] = g.filter(j => j !== i);
 
-const opts = { likely: true, shift: false, sameTypes: false, generous: false, noUB: false, sort: "close", ubSort: "mv" };
+const opts = { likely: true, shift: false, sameTypes: false, generous: false, noUB: false, sort: "close",
+  ubSort: "mv", ubColours: "", ubColourMode: "exact", ubMV: "" };
 try { Object.assign(opts, JSON.parse(localStorage.getItem("powercreep-opts") || "{}")); } catch (e) {}
 const saveOpts = () => { try { localStorage.setItem("powercreep-opts", JSON.stringify(opts)); } catch (e) {} };
 // Pairs flagged 32 only hold in generous mode, and replace any weaker version of the same pair.
@@ -553,11 +559,33 @@ const UB_SORTS = {
   type: { label: "Card type", group: typeGroup, head: k => k, order: (a, b) => TYPE_ORDER.indexOf(a) - TYPE_ORDER.indexOf(b) },
 };
 
-const UB_PAGE = 200;
+const UB_PAGE = 120;
+const MV_CHIPS = ["0", "1", "2", "3", "4", "5", "6", "7+"];
+// Colour filter, on colour identity. "C" on its own means colourless; alongside colours it's
+// ignored, except that "at most" always lets colourless cards through.
+const COLOUR_MODES = {
+  exact: { label: "Exactly", test: (id, pick) => id === pick },
+  include: { label: "Including", test: (id, pick) => [...pick].every(ch => id.includes(ch)) },
+  most: { label: "At most", test: (id, pick) => [...id].every(ch => pick.includes(ch)) },
+};
+function unbeatenFilter(c) {
+  const pick = "WUBRGC".split("").filter(ch => opts.ubColours.includes(ch)).join("");
+  if (pick) {
+    if (pick === "C") { if (c[IDENTITY]) return false; }
+    else if (!(COLOUR_MODES[opts.ubColourMode] || COLOUR_MODES.exact).test(c[IDENTITY], pick.replace("C", ""))) return false;
+  }
+  if (opts.ubMV) {
+    const mv = manaValue(c), chip = mv >= 7 ? "7+" : String(mv);
+    if (!opts.ubMV.split(",").includes(chip)) return false;
+  }
+  return true;
+}
+
 function unbeatenView() {
   document.title = "Unbeaten · Powercreep";
   const sort = UB_SORTS[opts.ubSort] || UB_SORTS.mv;
-  const list = CARDS.map((c, i) => i).filter(i => !gone(i) && !better[i].some(allowed) && !twins[i].some(j => !gone(j)))
+  const all = CARDS.map((c, i) => i).filter(i => !gone(i) && !better[i].some(allowed) && !twins[i].some(j => !gone(j)));
+  const list = all.filter(i => unbeatenFilter(CARDS[i]))
     .map(i => ({ i, k: sort.group(CARDS[i]) }))
     .sort((a, b) => sort.order(a.k, b.k) || CARDS[a.i][NAME].localeCompare(CARDS[b.i][NAME]));
   const counts = new Map();
@@ -566,22 +594,37 @@ function unbeatenView() {
   let html = "", last;
   for (const d of list.slice(0, limit)) {
     if (d.k !== last) {
-      html += `<div class="ugroup"><h2>${esc(String(sort.head(d.k)))}</h2><span class="muted">${counts.get(d.k).toLocaleString()} cards</span></div>`;
+      html += `${last === undefined ? "" : "</div>"}<div class="ugroup"><h2>${esc(String(sort.head(d.k)))}</h2>
+        <span class="muted">${counts.get(d.k).toLocaleString()} cards</span></div><div class="ugrid">`;
       last = d.k;
     }
     const c = CARDS[d.i];
-    html += `<a class="urow" href="${link(d.i)}"><span class="nm">${esc(c[NAME])}</span><span>${symbols(c[COST])}</span>
-      <span class="ty">${esc(c[TYPE])}</span><span class="yr">${year(c)}</span></a>`;
+    html += `<a href="${link(d.i)}" title="${esc(c[NAME])}">${image(c, "normal")}</a>`;
   }
+  if (last !== undefined) html += "</div>";
   const rest = list.length - limit;
   const sortPick = `<label>Sort by <select data-opt="ubSort">${Object.entries(UB_SORTS).map(([k, v]) =>
     `<option value="${k}" ${sort === v ? "selected" : ""}>${v.label}</option>`).join("")}</select></label><span class="spacer"></span>`;
+  const colourChip = ch => `<button class="chip" data-ubcolour="${ch}" aria-pressed="${opts.ubColours.includes(ch)}"
+    title="${ch === "C" ? "Colourless" : COLOUR_NAMES[ch]}">${symbols(`{${ch}}`)}</button>`;
+  const picked = opts.ubMV ? opts.ubMV.split(",") : [];
+  const filters = `<div class="ufilters">
+      <span class="chips"><span class="lbl">Colour</span>
+        <select data-opt="ubColourMode" aria-label="How to match colours">${Object.entries(COLOUR_MODES).map(([k, v]) =>
+          `<option value="${k}" ${opts.ubColourMode === k ? "selected" : ""}>${v.label}</option>`).join("")}</select>
+        ${"WUBRGC".split("").map(colourChip).join("")}
+        ${opts.ubColours ? `<button class="chip clear" data-ubclear="colour">Clear</button>` : ""}</span>
+      <span class="chips"><span class="lbl">Mana value</span>
+        ${MV_CHIPS.map(v => `<button class="chip" data-ubmv="${v}" aria-pressed="${picked.includes(v)}">${v}</button>`).join("")}
+        ${opts.ubMV ? `<button class="chip clear" data-ubclear="mv">Clear</button>` : ""}</span>
+    </div>`;
   app.innerHTML = `<h1>Unbeaten cards</h1>
-    <p class="muted" style="max-width:640px">Every card that has no strictly better card and no functionally identical twin,
-      under the settings below: <b style="color:var(--text)">${list.length.toLocaleString()}</b> of ${CARDS.filter((c, i) => !gone(i)).length.toLocaleString()} cards.
-      Close calls don't count as beating a card.</p>
+    <p class="muted" style="max-width:680px">Every card that has no strictly better card and no functionally identical twin,
+      under the settings below. Close calls don't count as beating a card.
+      Showing <b style="color:var(--text)">${list.length.toLocaleString()}</b> of ${all.length.toLocaleString()} unbeaten cards.</p>
+    ${filters}
     ${optionsBar(sortPick, false)}
-    ${html}
+    ${html || `<div class="empty">No unbeaten cards match these filters.</div>`}
     ${rest > 0 ? `<button class="btn more" data-more="unbeaten">Show ${Math.min(rest, PAGE * 3)} more</button>` : ""}`;
 }
 
@@ -930,6 +973,21 @@ app.addEventListener("change", e => {
   saveOpts(); rerender();
 });
 app.addEventListener("click", e => {
+  const ub = e.target.closest("[data-ubcolour], [data-ubmv], [data-ubclear]");
+  if (ub) {
+    if (ub.dataset.ubcolour) {
+      const ch = ub.dataset.ubcolour;
+      opts.ubColours = opts.ubColours.includes(ch) ? opts.ubColours.replace(ch, "") : opts.ubColours + ch;
+    } else if (ub.dataset.ubmv) {
+      const set = new Set(opts.ubMV ? opts.ubMV.split(",") : []);
+      set.has(ub.dataset.ubmv) ? set.delete(ub.dataset.ubmv) : set.add(ub.dataset.ubmv);
+      opts.ubMV = MV_CHIPS.filter(v => set.has(v)).join(",");
+    } else if (ub.dataset.ubclear === "colour") opts.ubColours = "";
+    else opts.ubMV = "";
+    delete shown.unbeaten;
+    saveOpts(); rerender();
+    return;
+  }
   const pick = e.target.closest("[data-pick]"), step = e.target.closest("[data-step]"), jump = e.target.closest("[data-jump]");
   if (jump) {
     // The first of these sections that's on the page (later cards may all be in the second).
