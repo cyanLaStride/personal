@@ -138,6 +138,15 @@
 
   .navlink { color: var(--muted); padding: 8px 4px; }
   .navlink:hover { color: var(--text); }
+  .ugroup { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .ugroup h2 { margin: 0; font-size: 17px; }
+  .urow { display: grid; grid-template-columns: minmax(0, 1.4fr) 132px minmax(0, 1fr) 44px; gap: 14px; align-items: center;
+          padding: 5px 8px; border-radius: 7px; }
+  .urow:hover { background: var(--panel); }
+  .urow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .urow .ty { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .urow .yr { color: var(--muted); text-align: right; }
+  @media (max-width: 700px) { .urow { grid-template-columns: minmax(0, 1fr) 110px 40px; } .urow .ty { display: none; } }
   .deckform { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; }
   .deckform summary { cursor: pointer; font-weight: 600; }
   .deckform textarea { display: block; width: 100%; height: 260px; margin: 10px 0; padding: 10px; resize: vertical;
@@ -180,6 +189,7 @@
       <div id="results" class="results" hidden></div>
     </div>
     <a class="navlink" href="#/deck">Deck check</a>
+    <a class="navlink" href="#/unbeaten">Unbeaten</a>
     <a class="navlink" href="#/charts">Charts</a>
     <button class="btn" id="random">Random card</button>
   </div>
@@ -214,7 +224,7 @@ const sideRows = i => sides[i].filter(allowed).map(p => p[0] === i
 const twins = CARDS.map(() => []);
 for (const g of SAME) for (const i of g) twins[i] = g.filter(j => j !== i);
 
-const opts = { likely: true, shift: false, sameTypes: false, generous: false, noUB: false, sort: "close" };
+const opts = { likely: true, shift: false, sameTypes: false, generous: false, noUB: false, sort: "close", ubSort: "mv" };
 try { Object.assign(opts, JSON.parse(localStorage.getItem("powercreep-opts") || "{}")); } catch (e) {}
 const saveOpts = () => { try { localStorage.setItem("powercreep-opts", JSON.stringify(opts)); } catch (e) {} };
 // Pairs flagged 32 only hold in generous mode, and replace any weaker version of the same pair.
@@ -516,6 +526,63 @@ function deckStep(by) {
   // top back into view, just below the sticky header.
   const top = app.querySelector(".deckview").getBoundingClientRect().top;
   if (top < 76) window.scrollTo(0, y + top - 76);
+}
+
+
+// ---- Unbeaten: every card with no strictly better card and no functionally identical twin ----
+const manaValue = c => {
+  let mv = 0;
+  for (const [, sym] of c[COST].split(" // ")[0].matchAll(/\{([^}]+)\}/g)) {
+    if (/^\d+$/.test(sym)) mv += +sym;
+    else if (!/^[XYZ]$/.test(sym)) mv += sym.startsWith("2/") ? 2 : 1;
+  }
+  return mv;
+};
+const COLOUR_NAMES = { W: "White", U: "Blue", B: "Black", R: "Red", G: "Green" };
+const colourGroup = c => c[IDENTITY].length > 1 ? "Multicolour" : COLOUR_NAMES[c[IDENTITY]] || "Colourless";
+const COLOUR_ORDER = ["White", "Blue", "Black", "Red", "Green", "Multicolour", "Colourless"];
+// A card goes under its most defining type: an artifact creature is a creature.
+const TYPE_ORDER = ["Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment", "Land", "Other"];
+const typeGroup = c => {
+  const front = c[TYPE].split(" // ")[0].split(" — ")[0];
+  return TYPE_ORDER.find(t => front.includes(t)) || "Other";
+};
+const UB_SORTS = {
+  mv: { label: "Mana value", group: c => manaValue(c), head: k => `Mana value ${k}`, order: (a, b) => a - b },
+  colour: { label: "Colour identity", group: colourGroup, head: k => k, order: (a, b) => COLOUR_ORDER.indexOf(a) - COLOUR_ORDER.indexOf(b) },
+  type: { label: "Card type", group: typeGroup, head: k => k, order: (a, b) => TYPE_ORDER.indexOf(a) - TYPE_ORDER.indexOf(b) },
+};
+
+const UB_PAGE = 200;
+function unbeatenView() {
+  document.title = "Unbeaten · Powercreep";
+  const sort = UB_SORTS[opts.ubSort] || UB_SORTS.mv;
+  const list = CARDS.map((c, i) => i).filter(i => !gone(i) && !better[i].some(allowed) && !twins[i].some(j => !gone(j)))
+    .map(i => ({ i, k: sort.group(CARDS[i]) }))
+    .sort((a, b) => sort.order(a.k, b.k) || CARDS[a.i][NAME].localeCompare(CARDS[b.i][NAME]));
+  const counts = new Map();
+  for (const d of list) counts.set(d.k, (counts.get(d.k) || 0) + 1);
+  const limit = shown.unbeaten || UB_PAGE;
+  let html = "", last;
+  for (const d of list.slice(0, limit)) {
+    if (d.k !== last) {
+      html += `<div class="ugroup"><h2>${esc(String(sort.head(d.k)))}</h2><span class="muted">${counts.get(d.k).toLocaleString()} cards</span></div>`;
+      last = d.k;
+    }
+    const c = CARDS[d.i];
+    html += `<a class="urow" href="${link(d.i)}"><span class="nm">${esc(c[NAME])}</span><span>${symbols(c[COST])}</span>
+      <span class="ty">${esc(c[TYPE])}</span><span class="yr">${year(c)}</span></a>`;
+  }
+  const rest = list.length - limit;
+  const sortPick = `<label>Sort by <select data-opt="ubSort">${Object.entries(UB_SORTS).map(([k, v]) =>
+    `<option value="${k}" ${sort === v ? "selected" : ""}>${v.label}</option>`).join("")}</select></label><span class="spacer"></span>`;
+  app.innerHTML = `<h1>Unbeaten cards</h1>
+    <p class="muted" style="max-width:640px">Every card that has no strictly better card and no functionally identical twin,
+      under the settings below: <b style="color:var(--text)">${list.length.toLocaleString()}</b> of ${CARDS.filter((c, i) => !gone(i)).length.toLocaleString()} cards.
+      Close calls don't count as beating a card.</p>
+    ${optionsBar(sortPick, false)}
+    ${html}
+    ${rest > 0 ? `<button class="btn more" data-more="unbeaten">Show ${Math.min(rest, PAGE * 3)} more</button>` : ""}`;
 }
 
 
@@ -840,6 +907,7 @@ function render() {
   const i = m ? byName.get(decodeURIComponent(m[1]).toLowerCase()) : undefined;
   hideTip();
   if (onDeck()) deckView(); else if (location.hash.startsWith("#/charts")) chartsView();
+  else if (location.hash.startsWith("#/unbeaten")) unbeatenView();
   else if (i === undefined) homeView(); else cardView(i);
 }
 function route() {
@@ -881,7 +949,7 @@ app.addEventListener("click", e => {
   if (e.target.dataset.act === "analyse") { loadDeck(document.getElementById("decktext").value); route(); return; }
   const key = e.target.dataset.more;
   if (!key) return;
-  shown[key] = (shown[key] || PAGE) + PAGE * 3;
+  shown[key] = (shown[key] || (key === "unbeaten" ? UB_PAGE : PAGE)) + PAGE * 3;
   rerender();
 });
 
