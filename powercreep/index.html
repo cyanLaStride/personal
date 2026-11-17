@@ -478,6 +478,8 @@ function deckView() {
         section("dSides", "side", "Sidegrades", "Same job, each ahead of the other in one way.", cur.sides, 0),
       ].join("") : `<div class="empty">Nothing lines up with ${esc(c[NAME])} inside this deck's colours.</div>`}`;
   }
+  // Redrawing replaces the card list, so remember how far it was scrolled.
+  const oldList = app.querySelector(".decklist"), listY = oldList ? oldList.scrollTop : 0;
   app.innerHTML = `<h1>Deck check</h1>
     <p class="muted" style="margin:0 0 14px">${total} cards recognised${total > deck.list.length ? ` (${deck.list.length} different)` : ""} · colour identity ${symbols(identity)} ·
       <b style="color:var(--up)">${info.filter(d => d.ups.length).length}</b> have a strict upgrade,
@@ -495,14 +497,25 @@ function deckView() {
       </aside>
       <div>${detail}</div>
     </div>`;
-  const on = app.querySelector(".pick.on");
-  if (on) on.scrollIntoView({ block: "nearest" });
+  // Keep the picked card in sight inside the list, without scrolling the page itself.
+  const list = app.querySelector(".decklist"), on = app.querySelector(".pick.on");
+  if (list) list.scrollTop = listY;
+  if (list && on) {
+    const l = list.getBoundingClientRect(), r = on.getBoundingClientRect();
+    if (r.top < l.top) list.scrollTop -= l.top - r.top;
+    else if (r.bottom > l.bottom) list.scrollTop += r.bottom - l.bottom;
+  }
 }
 function deckStep(by) {
+  const y = window.scrollY;
   deck.sel += by;
   for (const k in shown) delete shown[k];
   deckView();
-  window.scrollTo(0, 0);
+  window.scrollTo(0, y);
+  // Stay put, unless the new card's details would start above the screen: then bring their
+  // top back into view, just below the sticky header.
+  const top = app.querySelector(".deckview").getBoundingClientRect().top;
+  if (top < 76) window.scrollTo(0, y + top - 76);
 }
 
 
