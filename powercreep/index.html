@@ -189,7 +189,8 @@
 <script src="data.js"></script>
 <script>
 "use strict";
-// CARDS: [name, cost, type, size, date, set index, scryfall id, colour identity, commander legal, has a back face]
+// CARDS: [name, cost, type, size, date, set index, scryfall id, colour identity, commander legal, has a back face,
+//         Universes Beyond or other non-Magic IP]
 // PAIRS: [better, worse, flags (1 = strict, 2 = colour-shifted, 4 = other creature types, 8 = close call),
 //         reason ids, and for close calls the ids of what the better card gives up]
 const NAME = 0, COST = 1, TYPE = 2, SIZE = 3, DATE = 4, SET = 5, ID = 6;
@@ -213,13 +214,16 @@ const sideRows = i => sides[i].filter(allowed).map(p => p[0] === i
 const twins = CARDS.map(() => []);
 for (const g of SAME) for (const i of g) twins[i] = g.filter(j => j !== i);
 
-const opts = { likely: true, shift: false, sameTypes: false, generous: false, sort: "close" };
+const opts = { likely: true, shift: false, sameTypes: false, generous: false, noUB: false, sort: "close" };
 try { Object.assign(opts, JSON.parse(localStorage.getItem("powercreep-opts") || "{}")); } catch (e) {}
 const saveOpts = () => { try { localStorage.setItem("powercreep-opts", JSON.stringify(opts)); } catch (e) {} };
 // Pairs flagged 32 only hold in generous mode, and replace any weaker version of the same pair.
 const generousKeys = new Set();
 for (const p of PAIRS) if (p[2] & 32) { generousKeys.add(p[0] + "," + p[1]); generousKeys.add(p[1] + "," + p[0]); }
-const allowed = p => (opts.likely || (p[2] & 1)) && (opts.shift || !(p[2] & 2)) && (!opts.sameTypes || !(p[2] & 4))
+// With "no Universes Beyond" on, those cards drop out of every list and comparison.
+const UB = 10;
+const gone = i => opts.noUB && CARDS[i][UB] === 1;
+const allowed = p => !gone(p[0]) && !gone(p[1]) && (opts.likely || (p[2] & 1)) && (opts.shift || !(p[2] & 2)) && (!opts.sameTypes || !(p[2] & 4))
   && (p[2] & 32 ? opts.generous : !(opts.generous && generousKeys.has(p[0] + "," + p[1])));
 
 const esc = s => s.replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
@@ -245,6 +249,8 @@ function optionsBar(lead = "", sort = true) {
       <input type="checkbox" data-opt="sameTypes" ${opts.sameTypes ? "checked" : ""}> Shared types only</label>
     <label title="Don't count it against a card when it hands an opponent life, cards, tokens or a land.">
       <input type="checkbox" data-opt="generous" ${opts.generous ? "checked" : ""}> Generous</label>
+    <label title="Hide Universes Beyond cards, and other crossovers like the Dungeons &amp; Dragons sets, as if they were never printed.">
+      <input type="checkbox" data-opt="noUB" ${opts.noUB ? "checked" : ""}> No Universes Beyond</label>
     ${sort ? `<span class="spacer"></span>
     <label>Sort <select data-opt="sort">
       <option value="close" ${opts.sort === "close" ? "selected" : ""}>Closest match</option>
@@ -306,7 +312,7 @@ function cardView(i) {
   // Shaped like pairs so they can share the row layout; the chip notes any type difference.
   const subtype = t => t.includes(" — ") ? t.split(" — ")[1] : "no subtype";
   const paired = new Set(ups.map(p => p[0]).concat(downs.map(p => p[1])));
-  const same = twins[i].filter(j => CARDS[j][TYPE] === c[TYPE] || (!opts.sameTypes && !paired.has(j))).map(j => [j, j, 1, [], [CARDS[j][TYPE] === c[TYPE] ? "identical in every way but name"
+  const same = twins[i].filter(j => !gone(j)).filter(j => CARDS[j][TYPE] === c[TYPE] || (!opts.sameTypes && !paired.has(j))).map(j => [j, j, 1, [], [CARDS[j][TYPE] === c[TYPE] ? "identical in every way but name"
     : subtype(CARDS[j][TYPE]) + " instead of " + subtype(c[TYPE])]]);
   const nearUps = nearlyBetter[i].filter(allowed), nearDowns = nearlyWorse[i].filter(allowed);
   const side = sideRows(i);
@@ -435,7 +441,7 @@ function deckView() {
     downs: worse[i].filter(p => allowed(p) && ok(p[1])),
     nearDowns: nearlyWorse[i].filter(p => allowed(p) && ok(p[1])),
     sides: sideRows(i).filter(p => ok(p[0])),
-    same: twins[i].filter(ok).map(j => [j, j, 1, [], ["functionally identical"]]),
+    same: twins[i].filter(j => ok(j) && !gone(j)).map(j => [j, j, 1, [], ["functionally identical"]]),
   }));
   const withUps = info.filter(d => d.ups.length + d.nearUps.length);
   const visible = deck.only ? withUps : info;
@@ -522,11 +528,12 @@ function yearStats() {
     else sets.arrival.add(p[1]);
   }
   for (const i of sets.creeps) sets.near.delete(i);
-  for (const g of SAME) {
+  for (const all of SAME) {
+    const g = all.filter(i => !gone(i));
     const first = g.reduce((m, i) => CARDS[i][DATE] < m ? CARDS[i][DATE] : m, "9");
     for (const i of g) if (CARDS[i][DATE] > first) sets.reprint.add(i);
   }
-  for (const c of CARDS) row(year(c)).total++;
+  CARDS.forEach((c, i) => { if (!gone(i)) row(year(c)).total++; });
   for (const k in sets) for (const i of sets[k]) row(year(CARDS[i]))[k]++;
   return Object.values(years).sort((a, b) => a.year - b.year);
 }
@@ -684,14 +691,15 @@ function poolStats() {
     if (!beaten.has(p[1]) || when < beaten.get(p[1])) beaten.set(p[1], when);
   }
   for (const g of SAME) for (const i of g) {
-    const other = g.filter(j => j !== i).reduce((m, j) => CARDS[j][DATE] < m ? CARDS[j][DATE] : m, "9");
+    if (gone(i) || g.every(j => j === i || gone(j))) continue;
+    const other = g.filter(j => j !== i && !gone(j)).reduce((m, j) => CARDS[j][DATE] < m ? CARDS[j][DATE] : m, "9");
     twinned.set(i, later(CARDS[i][DATE], other));
   }
   const years = [...new Set(CARDS.map(year))].sort();
   return years.map(y => {
     const r = { year: +y, pool: 0, beaten: 0, twinned: 0, clean: 0 };
     CARDS.forEach((c, i) => {
-      if (year(c) > y) return;
+      if (year(c) > y || gone(i)) return;
       r.pool++;
       const b = beaten.has(i) && beaten.get(i).slice(0, 4) <= y, t = twinned.has(i) && twinned.get(i).slice(0, 4) <= y;
       if (b) r.beaten++;
@@ -762,7 +770,7 @@ function drawPool(host, rows) {
 
 function chartsView() {
   document.title = "Charts · Powercreep";
-  const rows = yearStats(), all = { total: CARDS.length }, pool = poolStats();
+  const rows = yearStats(), all = { total: CARDS.filter((c, i) => !gone(i)).length }, pool = poolStats();
   for (const s of SERIES) all[s.key] = rows.reduce((t, r) => t + r[s.key], 0);
   const pct = k => (all[k] / all.total * 100).toFixed(1) + "%";
   const seg = `<span class="seg" role="group" aria-label="Show as">
@@ -874,6 +882,7 @@ function search() {
     const starts = [], contains = [];
     for (let i = 0; i < CARDS.length && starts.length < 10; i++) {
       const n = CARDS[i][NAME].toLowerCase(), at = n.indexOf(term);
+      if (gone(i)) continue;
       if (at === 0) starts.push(i); else if (at > 0 && contains.length < 10) contains.push(i);
     }
     hits = starts.concat(contains).slice(0, 10);
@@ -907,7 +916,8 @@ document.addEventListener("keydown", e => {
   if (e.key === "/" && document.activeElement !== q) { e.preventDefault(); q.focus(); }
 });
 document.getElementById("random").addEventListener("click", () => {
-  const pool = CARDS.map((c, i) => i).filter(i => better[i].some(allowed) || worse[i].some(allowed) || nearlyBetter[i].length || nearlyWorse[i].length);
+  const pool = CARDS.map((c, i) => i).filter(i => !gone(i) && (better[i].some(allowed) || worse[i].some(allowed)
+    || nearlyBetter[i].some(allowed) || nearlyWorse[i].some(allowed)));
   go(pool[Math.floor(Math.random() * pool.length)]);
 });
 
