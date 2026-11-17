@@ -1,0 +1,917 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Powercreep</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f25; --panel-2: #242830; --line: #2f343e;
+    --text: #e8e6e1; --muted: #9a9ca3; --accent: #e0a13a;
+    --up: #6fbf8b; --down: #d9796a; --same: #7fa8d9; --side: #b4a6f0; --chip: #2a2f38;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: inherit; text-decoration: none; }
+  button, input, select { font: inherit; color: inherit; }
+
+  header { position: sticky; top: 0; z-index: 10; background: rgba(20,22,26,.94);
+           backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .bar { max-width: 1180px; margin: 0 auto; padding: 12px 20px; display: flex;
+         gap: 14px; align-items: center; flex-wrap: wrap; }
+  .logo { font-weight: 700; font-size: 18px; letter-spacing: .02em; }
+  .logo span { color: var(--accent); }
+  .search { position: relative; flex: 1 1 260px; }
+  .search input { width: 100%; padding: 9px 12px; background: var(--panel); border: 1px solid var(--line);
+                  border-radius: 8px; outline: none; }
+  .search input:focus { border-color: var(--accent); }
+  .results { position: absolute; left: 0; right: 0; top: calc(100% + 4px); background: var(--panel);
+             border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+             box-shadow: 0 12px 30px rgba(0,0,0,.5); }
+  .results a { display: flex; justify-content: space-between; gap: 12px; padding: 7px 12px; }
+  .results a.on, .results a:hover { background: var(--panel-2); }
+  .results small { color: var(--muted); white-space: nowrap; }
+  .btn { padding: 8px 12px; background: var(--panel); border: 1px solid var(--line);
+         border-radius: 8px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 20px 80px; }
+  h1 { font-size: 26px; margin: 0 0 6px; line-height: 1.2; }
+  h2 { font-size: 17px; margin: 0; }
+  .muted { color: var(--muted); }
+  .lead { max-width: 68ch; color: var(--muted); margin: 0 0 22px; }
+
+  .options { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; padding: 10px 14px;
+             background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 22px; }
+  .options label { display: flex; gap: 7px; align-items: center; cursor: pointer; }
+  .options select { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+  .options .spacer { flex: 1; }
+
+  .cardview { display: grid; grid-template-columns: 260px 1fr; gap: 28px; align-items: start; }
+  .hero { position: sticky; top: 76px; }
+  .hero img, .ph { width: 100%; height: auto; aspect-ratio: 488/680; border-radius: 4.75% / 3.5%; display: block;
+                   background: var(--panel-2); }
+  .ph { display: grid; place-items: center; padding: 12px; text-align: center; color: var(--muted);
+        border: 1px solid var(--line); }
+  .hero img + img { margin-top: 8px; }
+  .hero .meta { margin-top: 12px; font-size: 14px; color: var(--muted); }
+  .hero .meta a { color: var(--accent); }
+  .tally { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .tally button { min-width: 0; display: flex; flex-direction: column; justify-content: flex-start; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 8px; cursor: pointer; }
+  .tally button:hover:not(:disabled) { border-color: var(--accent); }
+  .tally button:disabled { cursor: default; }
+  section { scroll-margin-top: 80px; }
+  .tally small { display: block; font-size: 12px; line-height: 1.25; }
+  .tally b { display: block; font-size: 20px; line-height: 1.2; }
+  .tally small { color: var(--muted); }
+
+  section { margin-bottom: 30px; }
+  .sechead { display: flex; align-items: baseline; gap: 10px; padding-bottom: 8px; margin-bottom: 12px;
+             border-bottom: 1px solid var(--line); }
+  .sechead .n { color: var(--muted); }
+  .sechead p { margin: 0; color: var(--muted); font-size: 13px; flex-basis: 100%; }
+  .sechead { flex-wrap: wrap; }
+  .up h2 { color: var(--up); } .down h2 { color: var(--down); } .same h2 { color: var(--same); } .close h2 { color: var(--accent); } .side h2 { color: var(--side); }
+  .chip.mine { background: transparent; border: 1px solid var(--chip); }
+  .chip.give { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+
+  .row { display: grid; grid-template-columns: 220px 1fr; gap: 18px; padding: 10px; border-radius: 10px; }
+  .row:hover { background: var(--panel); }
+  .row > img, .row > .ph { width: 220px; height: auto; aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; }
+  .row .title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 600; }
+  .row .sub { color: var(--muted); font-size: 13px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; align-items: baseline; }
+  .chip { background: var(--chip); border-radius: 6px; padding: 2px 8px; font-size: 13px; }
+  .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+         border: 1px solid var(--line); color: var(--muted); border-radius: 5px; padding: 0 5px; }
+  .ms { height: 1em; width: 1em; vertical-align: -0.14em; margin: 0 .5px; }
+  .more { margin-top: 8px; }
+  .empty { padding: 26px; text-align: center; color: var(--muted); background: var(--panel);
+           border: 1px dashed var(--line); border-radius: 10px; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .rank { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; padding: 6px 8px; border-radius: 8px; }
+  .rank:hover { background: var(--panel); }
+  .rank .i { color: var(--muted); text-align: right; }
+  .rank .c { color: var(--muted); }
+  .examples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
+
+
+
+  /* Charts. Series colours are the dark steps of a validated categorical palette, in fixed order. */
+  .viz-root { --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s0: #898781;
+              --grid: #2c3038; --axis: #3a3f4a; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .tile .v { font-size: 26px; font-weight: 600; line-height: 1.2; }
+  .tile .l { color: var(--muted); font-size: 13px; }
+  .chart { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 18px; min-width: 0; }
+  .chart h2 { font-size: 15px; display: flex; gap: 8px; align-items: center; }
+  .chart p { margin: 2px 0 10px; color: var(--muted); font-size: 13px; }
+  .chart svg { display: block; outline: none; }
+  .chart svg:focus-visible { box-shadow: 0 0 0 2px var(--accent); border-radius: 6px; }
+  .chart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .chart text.lab { fill: var(--text); font-size: 12px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 10px; font-size: 13px; }
+  .legend span { display: inline-flex; gap: 7px; align-items: center; }
+  .legend i { width: 16px; height: 2px; border-radius: 1px; }
+  .smalls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .smalls .chart { margin: 0; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { background: none; border: 0; padding: 4px 12px; cursor: pointer; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--panel-2); color: var(--text); font-weight: 600; }
+  .tip { position: fixed; z-index: 50; pointer-events: none; background: #0e1013; border: 1px solid var(--line);
+         border-radius: 8px; padding: 8px 10px; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.5); max-width: 320px; }
+  .tip .hd { color: var(--muted); margin-bottom: 4px; }
+  .tiprow { display: flex; gap: 8px; align-items: center; }
+  .tiprow .key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+  .tiprow b { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
+  .tiprow span:last-child { color: var(--muted); }
+  .datatable { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .datatable th, .datatable td { text-align: right; padding: 4px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .datatable th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+  .datatable th:first-child, .datatable td:first-child { text-align: left; }
+  .tablewrap { overflow-x: auto; }
+
+  .navlink { color: var(--muted); padding: 8px 4px; }
+  .navlink:hover { color: var(--text); }
+  .deckform { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; }
+  .deckform summary { cursor: pointer; font-weight: 600; }
+  .deckform textarea { display: block; width: 100%; height: 260px; margin: 10px 0; padding: 10px; resize: vertical;
+                       background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+                       font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+  .deckview { display: grid; grid-template-columns: 280px 1fr; gap: 28px; align-items: start; }
+  .decklist { position: sticky; top: 76px; max-height: calc(100vh - 96px); overflow-y: auto; padding-right: 4px; }
+  .decklist .only { display: flex; gap: 7px; align-items: center; padding: 4px 8px 10px; color: var(--muted); cursor: pointer; }
+  .pick { display: flex; gap: 6px; align-items: center; width: 100%; text-align: left; padding: 5px 8px;
+          background: none; border: 0; border-radius: 7px; cursor: pointer; }
+  .pick:hover { background: var(--panel); }
+  .pick.on { background: var(--panel-2); box-shadow: inset 3px 0 0 var(--accent); }
+  .pick .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pick .b { font-size: 12px; font-weight: 700; min-width: 20px; text-align: center; border-radius: 5px; padding: 0 4px; background: var(--chip); }
+  .b.up { color: var(--up); } .b.close { color: var(--accent); } .b.down { color: var(--down); }
+  .deckcard { display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: start; margin-bottom: 24px; }
+  .deckcard > a > img, .deckcard .ph { width: 200px; height: auto; border-radius: 4.75% / 3.5%; display: block; }
+  .deckcard h1 a:hover { color: var(--accent); }
+  .stepper { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+  .btn:disabled { opacity: .4; cursor: default; }
+
+  @media (max-width: 760px) {
+    .deckview, .deckcard { grid-template-columns: 1fr; }
+    .smalls { grid-template-columns: 1fr; }
+    .tiles { grid-template-columns: 1fr 1fr; }
+    .decklist { position: static; max-height: 240px; }
+    .cardview { grid-template-columns: 1fr; }
+    .hero { position: static; max-width: 240px; }
+    .row { grid-template-columns: 1fr; }
+    .cols { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <a class="logo" href="#/">Power<span>creep</span></a>
+    <div class="search">
+      <input id="q" type="search" placeholder="Search for a card…" autocomplete="off" spellcheck="false">
+      <div id="results" class="results" hidden></div>
+    </div>
+    <a class="navlink" href="#/deck">Deck check</a>
+    <a class="navlink" href="#/charts">Charts</a>
+    <button class="btn" id="random">Random card</button>
+  </div>
+</header>
+<main id="app"><p class="muted">Loading card data…</p></main>
+
+<script src="data.js"></script>
+<script>
+"use strict";
+// CARDS: [name, cost, type, size, date, set index, scryfall id, colour identity, commander legal, has a back face]
+// PAIRS: [better, worse, flags (1 = strict, 2 = colour-shifted, 4 = other creature types, 8 = close call),
+//         reason ids, and for close calls the ids of what the better card gives up]
+const NAME = 0, COST = 1, TYPE = 2, SIZE = 3, DATE = 4, SET = 5, ID = 6;
+const app = document.getElementById("app");
+const byName = new Map(CARDS.map((c, i) => [c[NAME].toLowerCase(), i]));
+// "Fire // Ice" can also be found as "Fire" or "Ice", unless another card has that exact name.
+CARDS.forEach((c, i) => {
+  if (c[NAME].includes(" // ")) for (const part of c[NAME].toLowerCase().split(" // ")) if (!byName.has(part)) byName.set(part, i);
+});
+const better = CARDS.map(() => []), worse = CARDS.map(() => []);
+const nearlyBetter = CARDS.map(() => []), nearlyWorse = CARDS.map(() => []), sides = CARDS.map(() => []);
+for (const p of PAIRS) {
+  if (p[2] & 16) { sides[p[0]].push(p); sides[p[1]].push(p); }
+  else if (p[2] & 8) { nearlyBetter[p[1]].push(p); nearlyWorse[p[0]].push(p); }
+  else { better[p[1]].push(p); worse[p[0]].push(p); }
+}
+// A sidegrade seen from card i, shaped for the row layout: the other card, its edges, and ours.
+const sideRows = i => sides[i].filter(allowed).map(p => p[0] === i
+  ? [p[1], p[1], p[2], p[4], null, p[3]] : [p[0], p[0], p[2], p[3], null, p[4]]);
+// SAME: groups of card indexes that are functionally identical
+const twins = CARDS.map(() => []);
+for (const g of SAME) for (const i of g) twins[i] = g.filter(j => j !== i);
+
+const opts = { likely: true, shift: false, sameTypes: false, generous: false, sort: "close" };
+try { Object.assign(opts, JSON.parse(localStorage.getItem("powercreep-opts") || "{}")); } catch (e) {}
+const saveOpts = () => { try { localStorage.setItem("powercreep-opts", JSON.stringify(opts)); } catch (e) {} };
+// Pairs flagged 32 only hold in generous mode, and replace any weaker version of the same pair.
+const generousKeys = new Set();
+for (const p of PAIRS) if (p[2] & 32) { generousKeys.add(p[0] + "," + p[1]); generousKeys.add(p[1] + "," + p[0]); }
+const allowed = p => (opts.likely || (p[2] & 1)) && (opts.shift || !(p[2] & 2)) && (!opts.sameTypes || !(p[2] & 4))
+  && (p[2] & 32 ? opts.generous : !(opts.generous && generousKeys.has(p[0] + "," + p[1])));
+
+const esc = s => s.replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+const symbols = s => esc(s).replace(/\{([^}]+)\}/g, (m, sym) => {
+  const file = sym.toUpperCase().replace(/\//g, "");
+  return `<img class="ms" alt="{${sym.toUpperCase()}}" src="https://svgs.scryfall.io/card-symbols/${file}.svg">`;
+});
+const year = c => c[DATE].slice(0, 4);
+const link = i => "#/card/" + encodeURIComponent(CARDS[i][NAME]);
+const image = (c, size) => c[ID]
+  // Width and height reserve the card's space before the image arrives, so lazy loading
+  // doesn't push the rest of the page around.
+  ? `<img loading="lazy" width="488" height="680" alt="${esc(c[NAME])}" src="https://cards.scryfall.io/${size}/front/${c[ID][0]}/${c[ID][1]}/${c[ID]}.jpg">`
+  : `<div class="ph">${esc(c[NAME])}</div>`;
+
+function optionsBar(lead = "", sort = true) {
+  return `<div class="options">${lead}
+    <label title="Pairs where the better card has extra rules text that looks like pure upside, but can't be proven so.">
+      <input type="checkbox" data-opt="likely" ${opts.likely ? "checked" : ""}> Include likely matches</label>
+    <label title="Compare cards across colours: same amount of mana, different colour.">
+      <input type="checkbox" data-opt="shift" ${opts.shift ? "checked" : ""}> Compare across colours</label>
+    <label title="Only show pairs where the better card has every creature type the worse one has.">
+      <input type="checkbox" data-opt="sameTypes" ${opts.sameTypes ? "checked" : ""}> Shared types only</label>
+    <label title="Don't count it against a card when it hands an opponent life, cards, tokens or a land.">
+      <input type="checkbox" data-opt="generous" ${opts.generous ? "checked" : ""}> Generous</label>
+    ${sort ? `<span class="spacer"></span>
+    <label>Sort <select data-opt="sort">
+      <option value="close" ${opts.sort === "close" ? "selected" : ""}>Closest match</option>
+      <option value="new" ${opts.sort === "new" ? "selected" : ""}>Newest first</option>
+      <option value="old" ${opts.sort === "old" ? "selected" : ""}>Oldest first</option>
+    </select></label>` : ""}
+  </div>`;
+}
+
+function sorted(list, other) {
+  const date = p => CARDS[p[other]][DATE];
+  const cmp = {
+    close: (a, b) => (a[2] & 2) - (b[2] & 2) || a[3].length - b[3].length || (b[2] & 1) - (a[2] & 1) || date(a).localeCompare(date(b)),
+    new: (a, b) => date(b).localeCompare(date(a)),
+    old: (a, b) => date(a).localeCompare(date(b)),
+  }[opts.sort];
+  return list.slice().sort(cmp);
+}
+
+const PAGE = 40;
+function rows(list, other, limit) {
+  return list.slice(0, limit).map(p => {
+    const i = p[other], c = CARDS[i];
+    const tags = (p[2] & 1 ? "" : `<span class="tag" title="Extra text looks like upside, unverified">likely</span>`)
+               + (p[2] & 2 ? `<span class="tag" title="Only holds if you ignore colour">colour-shifted</span>` : "");
+    return `<a class="row" href="${link(i)}">
+      ${image(c, "normal")}
+      <div>
+        <div class="title">${esc(c[NAME])} <span>${symbols(c[COST])}</span> ${tags}</div>
+        <div class="sub">${esc(c[TYPE])}${c[SIZE] ? " · " + esc(c[SIZE]) : ""} · ${year(c)}, ${esc(SETS[c[SET]])}</div>
+        <div class="chips">${p[3].length ? `<span class="sub">${other === 0 ? "Its edge:" : "This card's edge:"}</span>` : ""}${p[3].map(r => `<span class="chip">${symbols(REASONS[r].replace(/~/g, "it"))}</span>`).join("")}${
+          (p[4] || []).map(t => typeof t === "number"
+            ? `<span class="chip give">but ${symbols(REASONS[t])}</span>`
+            : `<span class="chip">${esc(t)}</span>`).join("")}${
+          p[5] ? `<span class="sub">This card's edge:</span>${p[5].map(r => `<span class="chip mine">${symbols(REASONS[r].replace(/~/g, "it"))}</span>`).join("")}` : ""}</div>
+      </div>
+    </a>`;
+  }).join("");
+}
+
+const shown = {};
+function section(key, cls, title, blurb, list, other) {
+  if (!list.length) return "";
+  const limit = shown[key] || PAGE;
+  const rest = list.length - limit;
+  return `<section class="${cls}" id="sec-${key}">
+    <div class="sechead"><h2>${title}</h2><span class="n">${list.length}</span><p>${blurb}</p></div>
+    ${rows(sorted(list, other), other, limit)}
+    ${rest > 0 ? `<button class="btn more" data-more="${key}">Show ${Math.min(rest, PAGE * 3)} more</button>` : ""}
+  </section>`;
+}
+
+function cardView(i) {
+  const c = CARDS[i];
+  const ups = better[i].filter(allowed), downs = worse[i].filter(allowed);
+  const later = (p, other) => CARDS[p[other]][DATE] > c[DATE];
+  const creptBy = ups.filter(p => later(p, 0)), outclassed = ups.filter(p => !later(p, 0));
+  const creeps = downs.filter(p => !later(p, 1)), weaker = downs.filter(p => later(p, 1));
+  // Shaped like pairs so they can share the row layout; the chip notes any type difference.
+  const subtype = t => t.includes(" — ") ? t.split(" — ")[1] : "no subtype";
+  const paired = new Set(ups.map(p => p[0]).concat(downs.map(p => p[1])));
+  const same = twins[i].filter(j => CARDS[j][TYPE] === c[TYPE] || (!opts.sameTypes && !paired.has(j))).map(j => [j, j, 1, [], [CARDS[j][TYPE] === c[TYPE] ? "identical in every way but name"
+    : subtype(CARDS[j][TYPE]) + " instead of " + subtype(c[TYPE])]]);
+  const nearUps = nearlyBetter[i].filter(allowed), nearDowns = nearlyWorse[i].filter(allowed);
+  const side = sideRows(i);
+  const body = ups.length + downs.length + same.length + nearUps.length + nearDowns.length + side.length ? [
+    section("creptBy", "up", "Powercrept by", "Better cards printed after this one. The chips say what the newer card has over this one.", creptBy, 0),
+    section("creeps", "down", "Powercreeps", "Older cards this one outclasses. The chips say what this card has over the older one.", creeps, 1),
+    section("outclassed", "up", "Already outclassed by", "Better cards that existed before this one was printed.", outclassed, 0),
+    section("weaker", "down", "Later, weaker versions", "Cards printed afterwards that this one still beats.", weaker, 1),
+    section("nearUps", "close", "Close calls: nearly better", "Cards that beat this one except for a single concession, shown in amber: one point of power or toughness, one missing keyword, or one extra line that is or may be a drawback.", nearUps, 0),
+    section("nearDowns", "close", "Close calls: nearly worse", "Cards this one beats except for a single concession, shown in amber.", nearDowns, 1),
+    section("sides", "side", "Sidegrades", "Cards that do the same job, each ahead of the other in one way. Which is better depends on the deck.", side, 0),
+    section("same", "same", "Functionally identical", "Same cost, same stats, same rules text. Only the name, and sometimes the creature type, differs.", same, 0),
+  ].join("") : `<div class="empty">No strictly better or worse cards found for ${esc(c[NAME])} with these settings.<br>
+      That usually means it does something unique enough that nothing lines up exactly.</div>`;
+  document.title = c[NAME] + " · Powercreep";
+  app.innerHTML = `<div class="cardview">
+    <aside class="hero">
+      ${image(c, "normal")}
+      ${c[9] ? image(c, "normal").replace("/front/", "/back/") : ""}
+      <div class="tally">
+        <button data-jump="creptBy outclassed" ${ups.length ? "" : "disabled"}><b style="color:var(--up)">${ups.length}</b><small>better cards</small></button>
+        <button data-jump="creeps weaker" ${downs.length ? "" : "disabled"}><b style="color:var(--down)">${downs.length}</b><small>worse cards</small></button>
+        <button data-jump="same" ${same.length ? "" : "disabled"}><b style="color:var(--same)">${same.length}</b><small>identical</small></button>
+        <button data-jump="nearUps" ${nearUps.length ? "" : "disabled"}><b style="color:var(--accent)">${nearUps.length}</b><small>nearly better</small></button>
+        <button data-jump="nearDowns" ${nearDowns.length ? "" : "disabled"}><b style="color:var(--accent)">${nearDowns.length}</b><small>nearly worse</small></button>
+        <button data-jump="sides" ${side.length ? "" : "disabled"}><b style="color:var(--side)">${side.length}</b><small>sidegrades</small></button>
+      </div>
+      <div class="meta">First printed ${c[DATE]} in ${esc(SETS[c[SET]])}.<br>
+        <a href="https://scryfall.com/search?q=${encodeURIComponent('!"' + c[NAME] + '"')}" target="_blank" rel="noopener">View on Scryfall ↗</a></div>
+    </aside>
+    <div>
+      <h1>${esc(c[NAME])} <span style="font-size:.75em">${symbols(c[COST])}</span></h1>
+      <p class="muted" style="margin:0 0 18px">${esc(c[TYPE])}${c[SIZE] ? " · " + esc(c[SIZE]) : ""}</p>
+      ${optionsBar()}
+      ${body}
+    </div>
+  </div>`;
+}
+
+function homeView() {
+  document.title = "Powercreep";
+  const count = arr => arr.map((list, i) => [i, list.filter(allowed).length]).sort((a, b) => b[1] - a[1]).slice(0, 15);
+  const rank = (rowsData, word) => rowsData.map(([i, n], k) =>
+    `<a class="rank" href="${link(i)}"><span class="i">${k + 1}</span>
+      <span>${esc(CARDS[i][NAME])} <span class="muted">${symbols(CARDS[i][COST])} · ${year(CARDS[i])}</span></span>
+      <span class="c">${n} ${word}</span></a>`).join("");
+  const examples = ["Shock", "Cancel", "Grizzly Bears", "Savannah Lions", "Divination", "Serra Angel", "Pearled Unicorn", "Lightning Bolt"]
+    .filter(n => byName.has(n.toLowerCase()));
+  const total = PAIRS.filter(p => allowed(p) && !(p[2] & 24)).length;
+  app.innerHTML = `
+    <h1>Which cards have been left behind?</h1>
+    <p class="lead">Pick any Magic card to see the cards that do the same job better, and the ones it made obsolete.
+      A card counts as better when it does everything the other does for mana the other's cost could always pay,
+      and comes out ahead somewhere: cheaper, bigger, faster, or with extra upside.
+      ${total.toLocaleString()} such pairs found across ${CARDS.length.toLocaleString()} cards.</p>
+    <div class="examples">${examples.map(n => `<a class="btn" href="${link(byName.get(n.toLowerCase()))}">${esc(n)}</a>`).join("")}</div>
+    ${optionsBar()}
+    <div class="cols">
+      <section class="up"><div class="sechead"><h2>Most outclassed</h2><p>Cards with the most strictly better alternatives.</p></div>
+        ${rank(count(better), "better")}</section>
+      <section class="down"><div class="sechead"><h2>Biggest upgrades</h2><p>Cards that outclass the most others.</p></div>
+        ${rank(count(worse), "worse")}</section>
+    </div>`;
+}
+
+
+// Deck checker: paste a Commander list, step through it card by card.
+const IDENTITY = 7, LEGAL = 8;
+const deck = { text: "", list: [], qty: new Map(), unknown: [], sel: 0, only: false, editing: false };
+try { deck.text = localStorage.getItem("powercreep-deck") || ""; } catch (e) {}
+const HEADERS = /^(commander|companion|deck|main(board)?|sideboard|maybeboard|considering|lands?|creatures?|instants?|sorcer(y|ies)|artifacts?|enchantments?|planeswalkers?|battles?|tokens?|spells?|about|name)\b/i;
+
+function parseDeck(text) {
+  // The same card can appear on several lines (basics in different printings); copies add up.
+  const list = [], unknown = [], qty = new Map();
+  for (const raw of text.split("\n")) {
+    let line = raw.trim();
+    if (!line || line.startsWith("//") || line.startsWith("#")) continue;
+    const count = line.match(/^(\d+)\s*x?\s+/i);
+    // "1x Name (SET) 123 *F* [Tag]" -> "Name"
+    line = line.replace(/^\d+\s*x?\s+/i, "").replace(/\s+[(<*#^\[].*$/, "").replace(/\s*\/+\s*/g, " // ").trim();
+    let i = byName.get(line.toLowerCase());
+    // A bare collector number after the name: "Forest 278"
+    if (i === undefined) i = byName.get(line.replace(/\s+\d+[a-z]?$/i, "").toLowerCase());
+    if (i !== undefined) {
+      if (!qty.has(i)) list.push(i);
+      qty.set(i, (qty.get(i) || 0) + (count ? +count[1] : 1));
+    } else if (count || !HEADERS.test(line)) unknown.push(line);
+  }
+  return { list, unknown, qty };
+}
+function loadDeck(text) {
+  deck.text = text;
+  Object.assign(deck, parseDeck(text), { sel: 0, editing: false });
+  try { localStorage.setItem("powercreep-deck", text); } catch (e) {}
+}
+if (deck.text) loadDeck(deck.text);
+
+function deckForm(open) {
+  return `<details class="deckform" ${open ? "open" : ""}>
+    <summary>${deck.list.length ? "Edit decklist" : "Paste your decklist"}</summary>
+    <textarea id="decktext" spellcheck="false" placeholder="1 Sol Ring&#10;1 Llanowar Elves&#10;1 Cancel&#10;…">${esc(deck.text)}</textarea>
+    <button class="btn" data-act="analyse">Check this deck</button>
+    <span class="muted">One card per line. Counts, set codes and section headings are fine.</span>
+  </details>`;
+}
+
+function deckView() {
+  document.title = "Deck check · Powercreep";
+  if (!deck.list.length) {
+    app.innerHTML = `<h1>Deck check</h1>
+      <p class="lead">Paste a Commander decklist to step through it card by card and see what could replace each card:
+        strict upgrades, close calls and downgrades. Suggestions are limited to Commander-legal cards inside
+        your deck's colour identity that aren't already in the list.</p>
+      ${deck.unknown.length ? `<div class="empty">None of those ${deck.unknown.length} lines matched a card I have data for.</div>` : ""}
+      ${deckForm(true)}`;
+    return;
+  }
+  const inDeck = new Set(deck.list), ident = new Set();
+  const total = [...deck.qty.values()].reduce((a, b) => a + b, 0);
+  for (const i of deck.list) for (const ch of CARDS[i][IDENTITY]) ident.add(ch);
+  const ok = j => CARDS[j][LEGAL] && !inDeck.has(j) && [...CARDS[j][IDENTITY]].every(ch => ident.has(ch));
+  const info = deck.list.map(i => ({ i,
+    ups: better[i].filter(p => allowed(p) && ok(p[0])),
+    nearUps: nearlyBetter[i].filter(p => allowed(p) && ok(p[0])),
+    downs: worse[i].filter(p => allowed(p) && ok(p[1])),
+    nearDowns: nearlyWorse[i].filter(p => allowed(p) && ok(p[1])),
+    sides: sideRows(i).filter(p => ok(p[0])),
+    same: twins[i].filter(ok).map(j => [j, j, 1, [], ["functionally identical"]]),
+  }));
+  const withUps = info.filter(d => d.ups.length + d.nearUps.length);
+  const visible = deck.only ? withUps : info;
+  deck.sel = Math.max(0, Math.min(deck.sel, visible.length - 1));
+  const cur = visible[deck.sel];
+  const badge = (n, cls, word) => n ? `<span class="b ${cls}" title="${n} ${word}">${n}</span>` : "";
+  const listHtml = visible.map((d, k) => `<button class="pick ${k === deck.sel ? "on" : ""}" data-pick="${k}">
+      <span class="nm">${esc(CARDS[d.i][NAME])}${deck.qty.get(d.i) > 1 ? ` <span class="muted">×${deck.qty.get(d.i)}</span>` : ""}</span>
+      ${badge(d.ups.length, "up", "upgrades")}${badge(d.nearUps.length, "close", "close calls")}${badge(d.downs.length + d.nearDowns.length, "down", "downgrades")}
+    </button>`).join("");
+  const identity = "WUBRG".split("").filter(ch => ident.has(ch)).map(ch => `{${ch}}`).join("") || "{C}";
+  let detail = `<div class="empty">No cards in this deck have upgrades with these settings.</div>`;
+  if (cur) {
+    const c = CARDS[cur.i];
+    const any = cur.ups.length + cur.nearUps.length + cur.downs.length + cur.nearDowns.length + cur.same.length + cur.sides.length;
+    detail = `<div class="deckcard">
+        <a href="${link(cur.i)}">${image(c, "normal")}</a>
+        <div>
+          <div class="stepper">
+            <button class="btn" data-step="-1" ${deck.sel === 0 ? "disabled" : ""}>← Previous</button>
+            <span class="muted">${deck.sel + 1} of ${visible.length}</span>
+            <button class="btn" data-step="1" ${deck.sel === visible.length - 1 ? "disabled" : ""}>Next →</button>
+          </div>
+          <h1><a href="${link(cur.i)}">${esc(c[NAME])}</a> <span style="font-size:.75em">${symbols(c[COST])}</span></h1>
+          <p class="muted" style="margin:0">${esc(c[TYPE])}${c[SIZE] ? " · " + esc(c[SIZE]) : ""}</p>
+        </div>
+      </div>
+      ${any ? [
+        section("dUps", "up", "Upgrades", "Strictly better cards you could run instead.", cur.ups, 0),
+        section("dNearUps", "close", "Close calls: nearly better", "Better except for a single concession, shown in amber.", cur.nearUps, 0),
+        section("dSame", "same", "Straight swaps", "Functionally identical cards.", cur.same, 0),
+        section("dDowns", "down", "Downgrades", "Strictly worse cards. This one already beats them.", cur.downs, 1),
+        section("dNearDowns", "close", "Close calls: nearly worse", "Cards this one beats except for a single concession.", cur.nearDowns, 1),
+        section("dSides", "side", "Sidegrades", "Same job, each ahead of the other in one way.", cur.sides, 0),
+      ].join("") : `<div class="empty">Nothing lines up with ${esc(c[NAME])} inside this deck's colours.</div>`}`;
+  }
+  app.innerHTML = `<h1>Deck check</h1>
+    <p class="muted" style="margin:0 0 14px">${total} cards recognised${total > deck.list.length ? ` (${deck.list.length} different)` : ""} · colour identity ${symbols(identity)} ·
+      <b style="color:var(--up)">${info.filter(d => d.ups.length).length}</b> have a strict upgrade,
+      <b style="color:var(--accent)">${info.filter(d => !d.ups.length && d.nearUps.length).length}</b> more have only a close call.
+      Suggestions are Commander-legal, inside that identity, and not already in the deck.</p>
+    ${deck.unknown.length ? `<details class="deckform"><summary>${deck.unknown.length} ${deck.unknown.length === 1 ? "line" : "lines"} not recognised</summary>
+      <p class="muted">Usually a typo, or a card that isn't legal in Vintage or Commander (Un-sets, digital-only cards).</p>
+      <p>${deck.unknown.map(esc).join(" · ")}</p></details>` : ""}
+    ${deckForm(deck.editing)}
+    ${optionsBar()}
+    <div class="deckview">
+      <aside class="decklist">
+        <label class="only"><input type="checkbox" data-deckopt="only" ${deck.only ? "checked" : ""}> Only cards with upgrades (${withUps.length})</label>
+        ${listHtml}
+      </aside>
+      <div>${detail}</div>
+    </div>`;
+  const on = app.querySelector(".pick.on");
+  if (on) on.scrollIntoView({ block: "nearest" });
+}
+function deckStep(by) {
+  deck.sel += by;
+  for (const k in shown) delete shown[k];
+  deckView();
+  window.scrollTo(0, 0);
+}
+
+
+// ---- Charts: how many cards in each category were first printed each year ----
+const chartsState = { mode: "count" };
+// Fixed order: a category keeps its colour whatever the filters do.
+const SERIES = [
+  { key: "creeps", color: "var(--s1)", label: "Powercreeps an older card", note: "Strictly better than at least one card printed before it." },
+  { key: "near", color: "var(--s2)", label: "Close call on an older card", note: "Nearly better than an older card, with one concession, and not a strict upgrade on any." },
+  { key: "later", color: "var(--s3)", label: "Since powercrept", note: "A strictly better card has been printed after it. Recent years have had less time for that." },
+  { key: "arrival", color: "var(--s4)", label: "Outclassed on arrival", note: "A strictly better card already existed, or came out alongside it." },
+  { key: "reprint", color: "var(--s5)", label: "Functional reprint", note: "Identical to an older card in everything but name." },
+];
+function yearStats() {
+  const years = {}, sets = { creeps: new Set(), near: new Set(), later: new Set(), arrival: new Set(), reprint: new Set() };
+  const row = y => years[y] || (years[y] = { year: +y, total: 0, creeps: 0, near: 0, later: 0, arrival: 0, reprint: 0 });
+  for (const p of PAIRS) {
+    if (!allowed(p)) continue;
+    const newer = CARDS[p[0]][DATE] > CARDS[p[1]][DATE];
+    if (p[2] & 16) continue;
+    if (p[2] & 8) { if (newer) sets.near.add(p[0]); }
+    else if (newer) { sets.creeps.add(p[0]); sets.later.add(p[1]); }
+    else sets.arrival.add(p[1]);
+  }
+  for (const i of sets.creeps) sets.near.delete(i);
+  for (const g of SAME) {
+    const first = g.reduce((m, i) => CARDS[i][DATE] < m ? CARDS[i][DATE] : m, "9");
+    for (const i of g) if (CARDS[i][DATE] > first) sets.reprint.add(i);
+  }
+  for (const c of CARDS) row(year(c)).total++;
+  for (const k in sets) for (const i of sets[k]) row(year(CARDS[i]))[k]++;
+  return Object.values(years).sort((a, b) => a.year - b.year);
+}
+
+const SVGNS = "http://www.w3.org/2000/svg";
+function svg(tag, attrs, text) {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (text != null) n.textContent = text;
+  return n;
+}
+const tip = document.createElement("div");
+tip.className = "tip"; tip.hidden = true;
+document.body.appendChild(tip);
+function showTip(x, y, heading, rowsData) {
+  tip.textContent = "";
+  const hd = document.createElement("div"); hd.className = "hd"; hd.textContent = heading; tip.appendChild(hd);
+  for (const [color, value, label] of rowsData) {
+    const r = document.createElement("div"); r.className = "tiprow";
+    if (color) { const k = document.createElement("span"); k.className = "key"; k.style.background = color; r.appendChild(k); }
+    const b = document.createElement("b"); b.textContent = value; r.appendChild(b);
+    const s = document.createElement("span"); s.textContent = label; r.appendChild(s);
+    tip.appendChild(r);
+  }
+  tip.hidden = false;
+  const box = tip.getBoundingClientRect();
+  let left = x + 14, top = y - box.height - 10;
+  if (left + box.width > innerWidth - 8) left = x - box.width - 14;
+  if (top < 8) top = y + 16;
+  tip.style.left = Math.max(8, left) + "px"; tip.style.top = top + "px";
+}
+const hideTip = () => { tip.hidden = true; };
+function niceTicks(max) {
+  if (max <= 0) return [0, 1];
+  // The smallest round step that covers the data in at most five intervals.
+  const pow = Math.pow(10, Math.floor(Math.log10(max / 5)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * pow).find(s => max / s <= 5);
+  const out = [];
+  for (let v = 0; v < max + step * 0.999; v += step) out.push(+v.toFixed(6));
+  return out;
+}
+const share = () => chartsState.mode === "share";
+const chartVal = (r, k) => share() ? (r.total ? r[k] / r.total * 100 : 0) : r[k];
+const fmtVal = v => share() ? v.toFixed(1) + "%" : Math.round(v).toLocaleString();
+const fmtTick = v => share() ? v + "%" : v >= 1000 ? v / 1000 + "K" : String(v);
+const both = (r, k) => `${r[k].toLocaleString()} (${(r.total ? r[k] / r.total * 100 : 0).toFixed(1)}%)`;
+
+function axes(root, rows, m, W, H, ticks, x, y, every) {
+  for (const t of ticks) {
+    root.appendChild(svg("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), style: `stroke:var(--${t ? "grid" : "axis"})`, "stroke-width": 1 }));
+    root.appendChild(svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, fmtTick(t)));
+  }
+  rows.forEach((r, i) => { if (r.year % every === 0) root.appendChild(svg("text", { x: x(i), y: H - 8, "text-anchor": "middle" }, r.year)); });
+}
+
+function drawLines(host, rows) {
+  host.textContent = "";
+  const W = host.clientWidth, H = 340, wide = W >= 700;
+  const m = { l: 46, r: wide ? 200 : 14, t: 14, b: 30 }, pw = W - m.l - m.r, ph = H - m.t - m.b, n = rows.length;
+  const ticks = niceTicks(Math.max(...rows.flatMap(r => SERIES.map(s => chartVal(r, s.key)))));
+  const top = ticks[ticks.length - 1];
+  const x = i => m.l + i * pw / (n - 1), y = v => m.t + ph - v / top * ph;
+  const root = svg("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, tabindex: 0, role: "img",
+    "aria-label": "Line chart of cards per year in each category. Use the left and right arrow keys to read values; the same numbers are in the table below." });
+  axes(root, rows, m, W, H, ticks, x, y, 5);
+  const last = rows[n - 1], ends = [];
+  for (const s of SERIES) {
+    const d = rows.map((r, i) => (i ? "L" : "M") + x(i).toFixed(1) + "," + y(chartVal(r, s.key)).toFixed(1)).join("");
+    root.appendChild(svg("path", { d, fill: "none", style: `stroke:${s.color}`, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    ends.push({ s, y: y(chartVal(last, s.key)) });
+  }
+  // End markers, and a label where there's room: converging lines are left to the legend.
+  let prev = -99;
+  for (const e of ends.sort((a, b) => a.y - b.y)) {
+    root.appendChild(svg("circle", { cx: x(n - 1), cy: e.y, r: 4, style: `fill:${e.s.color};stroke:var(--panel)`, "stroke-width": 2 }));
+    if (wide && e.y - prev >= 16) { root.appendChild(svg("text", { x: x(n - 1) + 10, y: e.y + 4, class: "lab" }, e.s.label)); prev = e.y; }
+  }
+  const cross = svg("g", { visibility: "hidden" });
+  const rule = svg("line", { y1: m.t, y2: m.t + ph, style: "stroke:var(--muted)", "stroke-width": 1 });
+  cross.appendChild(rule);
+  const dots = SERIES.map(s => cross.appendChild(svg("circle", { r: 4, style: `fill:${s.color};stroke:var(--panel)`, "stroke-width": 2 })));
+  root.appendChild(cross);
+  let at = n - 1;
+  const point = (i, px, py) => {
+    at = Math.max(0, Math.min(n - 1, i));
+    const r = rows[at];
+    rule.setAttribute("x1", x(at)); rule.setAttribute("x2", x(at));
+    dots.forEach((d, k) => { d.setAttribute("cx", x(at)); d.setAttribute("cy", y(chartVal(r, SERIES[k].key))); });
+    cross.setAttribute("visibility", "visible");
+    const box = root.getBoundingClientRect();
+    showTip(px ?? box.left + x(at), py ?? box.top + m.t + 40, `${r.year} · ${r.total.toLocaleString()} new cards`,
+      SERIES.map(s => [s.color, fmtVal(chartVal(r, s.key)), s.label]));
+  };
+  const off = () => { cross.setAttribute("visibility", "hidden"); hideTip(); };
+  const hit = svg("rect", { x: m.l - 10, y: m.t, width: pw + 20, height: ph, fill: "transparent" });
+  hit.addEventListener("pointermove", e => point(Math.round((e.clientX - root.getBoundingClientRect().left - m.l) / pw * (n - 1)), e.clientX, e.clientY));
+  hit.addEventListener("pointerleave", off);
+  root.appendChild(hit);
+  root.addEventListener("keydown", e => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault(); e.stopPropagation();
+    point(at + (e.key === "ArrowRight" ? 1 : -1));
+  });
+  root.addEventListener("focus", () => point(at));
+  root.addEventListener("blur", off);
+  host.appendChild(root);
+}
+
+function drawBars(host, rows, key, color, label) {
+  host.textContent = "";
+  const counts = key === "total";
+  const val = r => counts ? r.total : chartVal(r, key), fmt = v => counts ? Math.round(v).toLocaleString() : fmtVal(v);
+  const W = host.clientWidth, H = 190, m = { l: 40, r: 8, t: 18, b: 26 }, pw = W - m.l - m.r, ph = H - m.t - m.b, n = rows.length;
+  const max = Math.max(...rows.map(val));
+  const ticks = niceTicks(max);
+  const top = ticks[ticks.length - 1], band = pw / n, bw = Math.max(2, Math.min(24, band - 2));
+  const x = i => m.l + band * (i + 0.5), y = v => m.t + ph - v / top * ph;
+  const root = svg("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `Column chart: ${label}, per year. The same numbers are in the table below.` });
+  for (const t of [0, top / 2, top]) {
+    root.appendChild(svg("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), style: `stroke:var(--${t ? "grid" : "axis"})`, "stroke-width": 1 }));
+    root.appendChild(svg("text", { x: m.l - 6, y: y(t) + 4, "text-anchor": "end" }, counts ? (t >= 1000 ? t / 1000 + "K" : String(t)) : fmtTick(t)));
+  }
+  rows.forEach((r, i) => { if (r.year % 10 === 5) root.appendChild(svg("text", { x: x(i), y: H - 8, "text-anchor": "middle" }, r.year)); });
+  const peak = rows.reduce((b, r, i) => val(r) > val(rows[b]) ? i : b, 0);
+  rows.forEach((r, i) => {
+    const v = val(r), h = v / top * ph, x0 = x(i) - bw / 2, y0 = m.t + ph - h, rad = Math.min(4, bw / 2, h);
+    const bar = svg("path", { style: `fill:${color}`,
+      d: `M${x0},${m.t + ph}V${y0 + rad}Q${x0},${y0} ${x0 + rad},${y0}H${x0 + bw - rad}Q${x0 + bw},${y0} ${x0 + bw},${y0 + rad}V${m.t + ph}Z` });
+    if (h > 0) root.appendChild(bar);
+    // The whole column of the band is the hover target, not just the painted bar.
+    const hit = svg("rect", { x: x(i) - band / 2, y: m.t, width: band, height: ph, fill: "transparent" });
+    hit.addEventListener("pointermove", e => {
+      bar.style.opacity = 0.7;
+      showTip(e.clientX, e.clientY, String(r.year), counts ? [[color, r.total.toLocaleString(), "new cards"]]
+        : [[color, both(r, key), label], [null, r.total.toLocaleString(), "new cards that year"]]);
+    });
+    hit.addEventListener("pointerleave", () => { bar.style.opacity = 1; hideTip(); });
+    root.appendChild(hit);
+  });
+  // One direct label, on the tallest column.
+  const px = Math.max(m.l + 14, Math.min(W - m.r - 14, x(peak)));
+  root.appendChild(svg("text", { x: px, y: y(val(rows[peak])) - 5, "text-anchor": "middle", class: "lab" }, fmt(val(rows[peak]))));
+  host.appendChild(root);
+}
+
+// The state of the whole game at the end of each year: of every card printed so far, how many
+// still have no strictly better card and no functionally identical twin among them.
+function poolStats() {
+  const beaten = new Map(), twinned = new Map();
+  const later = (a, b) => a > b ? a : b;
+  for (const p of PAIRS) {
+    if ((p[2] & 24) || !allowed(p)) continue;
+    // A card counts as beaten from the moment both it and the better card exist.
+    const when = later(CARDS[p[0]][DATE], CARDS[p[1]][DATE]);
+    if (!beaten.has(p[1]) || when < beaten.get(p[1])) beaten.set(p[1], when);
+  }
+  for (const g of SAME) for (const i of g) {
+    const other = g.filter(j => j !== i).reduce((m, j) => CARDS[j][DATE] < m ? CARDS[j][DATE] : m, "9");
+    twinned.set(i, later(CARDS[i][DATE], other));
+  }
+  const years = [...new Set(CARDS.map(year))].sort();
+  return years.map(y => {
+    const r = { year: +y, pool: 0, beaten: 0, twinned: 0, clean: 0 };
+    CARDS.forEach((c, i) => {
+      if (year(c) > y) return;
+      r.pool++;
+      const b = beaten.has(i) && beaten.get(i).slice(0, 4) <= y, t = twinned.has(i) && twinned.get(i).slice(0, 4) <= y;
+      if (b) r.beaten++;
+      if (t) r.twinned++;
+      if (!b && !t) r.clean++;
+    });
+    r.pct = r.clean / r.pool * 100;
+    return r;
+  });
+}
+
+function drawPool(host, rows) {
+  host.textContent = "";
+  const W = host.clientWidth, H = 300, m = { l: 46, r: 64, t: 24, b: 30 }, pw = W - m.l - m.r, ph = H - m.t - m.b, n = rows.length;
+  // A share that lives in the 90s would be a flat line on a 0-100 axis, so the axis is cut
+  // off below the data. Line only, no fill: a filled area would imply a zero baseline.
+  const low = Math.floor((Math.min(...rows.map(r => r.pct)) - 0.5) / 2) * 2, step = (100 - low) / 4;
+  const x = i => m.l + i * pw / (n - 1), y = v => m.t + ph - (v - low) / (100 - low) * ph;
+  const root = svg("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, tabindex: 0, role: "img",
+    "aria-label": "Line chart: share of all cards printed so far that are unique and not strictly beaten, by year. Use the left and right arrow keys to read values; the same numbers are in the table below." });
+  for (let t = low; t <= 100.001; t += step) {
+    root.appendChild(svg("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), style: `stroke:var(--${t === low ? "axis" : "grid"})`, "stroke-width": 1 }));
+    root.appendChild(svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, +t.toFixed(1) + "%"));
+  }
+  rows.forEach((r, i) => { if (r.year % 5 === 0) root.appendChild(svg("text", { x: x(i), y: H - 8, "text-anchor": "middle" }, r.year)); });
+  root.appendChild(svg("path", { fill: "none", style: "stroke:var(--s1)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round",
+    d: rows.map((r, i) => (i ? "L" : "M") + x(i).toFixed(1) + "," + y(r.pct).toFixed(1)).join("") }));
+  // Label the start, the lowest point and the latest year; the rest is on the axis and in the tooltip.
+  const lowest = rows.reduce((b, r, i) => r.pct < rows[b].pct ? i : b, 0);
+  for (const i of new Set([0, lowest, n - 1])) {
+    root.appendChild(svg("circle", { cx: x(i), cy: y(rows[i].pct), r: 4, style: "fill:var(--s1);stroke:var(--panel)", "stroke-width": 2 }));
+    const end = i === n - 1;
+    root.appendChild(svg("text", { x: end ? x(i) + 10 : x(i) + (i ? 0 : 8), y: end ? y(rows[i].pct) + 4 : y(rows[i].pct) + (i === lowest ? 18 : -9),
+      "text-anchor": end || !i ? "start" : "middle", class: "lab" }, rows[i].pct.toFixed(1) + "%"));
+  }
+  const cross = svg("g", { visibility: "hidden" });
+  const rule = cross.appendChild(svg("line", { y1: m.t, y2: m.t + ph, style: "stroke:var(--muted)", "stroke-width": 1 }));
+  const dot = cross.appendChild(svg("circle", { r: 4, style: "fill:var(--s1);stroke:var(--panel)", "stroke-width": 2 }));
+  root.appendChild(cross);
+  let at = n - 1;
+  const share = (k, r) => (r[k] / r.pool * 100).toFixed(1) + "%";
+  const point = (i, px, py) => {
+    at = Math.max(0, Math.min(n - 1, i));
+    const r = rows[at];
+    rule.setAttribute("x1", x(at)); rule.setAttribute("x2", x(at));
+    dot.setAttribute("cx", x(at)); dot.setAttribute("cy", y(r.pct));
+    cross.setAttribute("visibility", "visible");
+    const box = root.getBoundingClientRect();
+    showTip(px ?? box.left + x(at), py ?? box.top + m.t + 40, `End of ${r.year} · ${r.pool.toLocaleString()} cards in the game`, [
+      ["var(--s1)", share("clean", r), `unique and unbeaten (${r.clean.toLocaleString()})`],
+      [null, share("beaten", r), `have a strictly better card (${r.beaten.toLocaleString()})`],
+      [null, share("twinned", r), `have an identical twin (${r.twinned.toLocaleString()})`]]);
+  };
+  const off = () => { cross.setAttribute("visibility", "hidden"); hideTip(); };
+  const hit = svg("rect", { x: m.l - 10, y: m.t, width: pw + 20, height: ph, fill: "transparent" });
+  hit.addEventListener("pointermove", e => point(Math.round((e.clientX - root.getBoundingClientRect().left - m.l) / pw * (n - 1)), e.clientX, e.clientY));
+  hit.addEventListener("pointerleave", off);
+  root.appendChild(hit);
+  root.addEventListener("keydown", e => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault(); e.stopPropagation();
+    point(at + (e.key === "ArrowRight" ? 1 : -1));
+  });
+  root.addEventListener("focus", () => point(at));
+  root.addEventListener("blur", off);
+  host.appendChild(root);
+}
+
+function chartsView() {
+  document.title = "Charts · Powercreep";
+  const rows = yearStats(), all = { total: CARDS.length }, pool = poolStats();
+  for (const s of SERIES) all[s.key] = rows.reduce((t, r) => t + r[s.key], 0);
+  const pct = k => (all[k] / all.total * 100).toFixed(1) + "%";
+  const seg = `<span class="seg" role="group" aria-label="Show as">
+      <button data-mode="count" aria-pressed="${!share()}">Number of cards</button>
+      <button data-mode="share" aria-pressed="${share()}">Share of that year's cards</button></span>`;
+  app.innerHTML = `<div class="viz-root">
+    <h1>Powercreep by year</h1>
+    <p class="lead">Every card is counted once, in the year it was first printed, under each category it falls into.
+      A card can be in more than one. ${rows[rows.length - 1].year} is a partial year.</p>
+    ${optionsBar(seg, false)}
+    <div class="tiles">
+      <div class="tile"><div class="v">${all.total.toLocaleString()}</div><div class="l">cards, ${rows[0].year} to ${rows[rows.length - 1].year}</div></div>
+      <div class="tile"><div class="v">${pct("creeps")}</div><div class="l">powercreep an older card (${all.creeps.toLocaleString()})</div></div>
+      <div class="tile"><div class="v">${pct("later")}</div><div class="l">have since been powercrept (${all.later.toLocaleString()})</div></div>
+      <div class="tile"><div class="v">${pct("arrival")}</div><div class="l">were outclassed on arrival (${all.arrival.toLocaleString()})</div></div>
+    </div>
+    <div class="chart">
+      <h2>Share of the game that is unique and unbeaten</h2>
+      <p>Of every card printed up to the end of each year, the percentage with no strictly better card and no functionally
+        identical twin among them. Always a percentage. The axis starts at ${Math.floor((Math.min(...pool.map(r => r.pct)) - 0.5) / 2) * 2}%, not zero.</p>
+      <div id="pool"></div>
+    </div>
+    <div class="chart">
+      <h2>All categories, ${share() ? "as a share of each year's new cards" : "cards per year"}</h2>
+      <div class="legend">${SERIES.map(s => `<span><i style="background:${s.color}"></i>${s.label}</span>`).join("")}</div>
+      <div id="lines"></div>
+    </div>
+    <div class="smalls">
+      ${SERIES.map(s => `<div class="chart"><h2><span class="swatch" style="background:${s.color}"></span>${s.label}</h2><p>${s.note}</p><div data-bars="${s.key}"></div></div>`).join("")}
+      <div class="chart"><h2><span class="swatch" style="background:var(--s0)"></span>All new cards</h2><p>Every card first printed that year, for scale. Always a count.</p><div data-bars="total"></div></div>
+    </div>
+    <details class="deckform" style="margin-top:18px"><summary>Show the numbers as a table</summary>
+      <div class="tablewrap"><table class="datatable">
+        <thead><tr><th>Year</th><th>New cards</th>${SERIES.map(s => `<th>${s.label}</th>`).join("")}<th>Cards in the game</th><th>Unique and unbeaten</th></tr></thead>
+        <tbody>${rows.map((r, i) => `<tr><td>${r.year}</td><td>${r.total.toLocaleString()}</td>${SERIES.map(s => `<td>${both(r, s.key)}</td>`).join("")}<td>${pool[i].pool.toLocaleString()}</td><td>${pool[i].clean.toLocaleString()} (${pool[i].pct.toFixed(1)}%)</td></tr>`).join("")}</tbody>
+      </table></div></details>
+  </div>`;
+  drawPool(document.getElementById("pool"), pool);
+  drawLines(document.getElementById("lines"), rows);
+  for (const host of app.querySelectorAll("[data-bars]")) {
+    const s = SERIES.find(q => q.key === host.dataset.bars);
+    drawBars(host, rows, host.dataset.bars, s ? s.color : "var(--s0)", s ? s.label : "All new cards");
+  }
+}
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (location.hash.startsWith("#/charts")) rerender(); }, 150);
+});
+
+const onDeck = () => location.hash.startsWith("#/deck");
+function render() {
+  const m = location.hash.match(/^#\/card\/(.+)$/);
+  const i = m ? byName.get(decodeURIComponent(m[1]).toLowerCase()) : undefined;
+  hideTip();
+  if (onDeck()) deckView(); else if (location.hash.startsWith("#/charts")) chartsView();
+  else if (i === undefined) homeView(); else cardView(i);
+}
+function route() {
+  for (const k in shown) delete shown[k];
+  render();
+  window.scrollTo(0, 0);
+}
+function rerender() {
+  const y = window.scrollY;
+  render();
+  window.scrollTo(0, y);
+}
+window.addEventListener("hashchange", route);
+
+app.addEventListener("change", e => {
+  if (e.target.dataset.deckopt) { deck.only = e.target.checked; deck.sel = 0; rerender(); return; }
+  const key = e.target.dataset.opt;
+  if (!key) return;
+  opts[key] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+  saveOpts(); rerender();
+});
+app.addEventListener("click", e => {
+  const pick = e.target.closest("[data-pick]"), step = e.target.closest("[data-step]"), jump = e.target.closest("[data-jump]");
+  if (jump) {
+    // The first of these sections that's on the page (later cards may all be in the second).
+    const target = jump.dataset.jump.split(" ").map(k => document.getElementById("sec-" + k)).find(Boolean);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      // If anything above it changed size on the way down, finish the job.
+      addEventListener("scrollend", () => {
+        if (Math.abs(target.getBoundingClientRect().top - 80) > 4) target.scrollIntoView({ block: "start" });
+      }, { once: true });
+    }
+    return;
+  }
+  if (pick) { deckStep(+pick.dataset.pick - deck.sel); return; }
+  if (step) { deckStep(+step.dataset.step); return; }
+  if (e.target.dataset.mode) { chartsState.mode = e.target.dataset.mode; rerender(); return; }
+  if (e.target.dataset.act === "analyse") { loadDeck(document.getElementById("decktext").value); route(); return; }
+  const key = e.target.dataset.more;
+  if (!key) return;
+  shown[key] = (shown[key] || PAGE) + PAGE * 3;
+  rerender();
+});
+
+// Search
+const q = document.getElementById("q"), box = document.getElementById("results");
+let hits = [], active = 0;
+function search() {
+  const term = q.value.trim().toLowerCase();
+  hits = [];
+  if (term.length >= 2) {
+    const starts = [], contains = [];
+    for (let i = 0; i < CARDS.length && starts.length < 10; i++) {
+      const n = CARDS[i][NAME].toLowerCase(), at = n.indexOf(term);
+      if (at === 0) starts.push(i); else if (at > 0 && contains.length < 10) contains.push(i);
+    }
+    hits = starts.concat(contains).slice(0, 10);
+  }
+  active = 0;
+  box.hidden = !hits.length;
+  box.innerHTML = hits.map((i, k) => `<a href="${link(i)}" class="${k === active ? "on" : ""}">
+    <span>${esc(CARDS[i][NAME])}</span><small>${better[i].filter(allowed).length} better · ${worse[i].filter(allowed).length} worse</small></a>`).join("");
+}
+function go(i) { location.hash = link(i); q.value = ""; box.hidden = true; q.blur(); }
+q.addEventListener("input", search);
+q.addEventListener("focus", search);
+q.addEventListener("keydown", e => {
+  if (e.key === "Enter" && hits.length) { go(hits[active]); return; }
+  if (e.key === "Escape") { box.hidden = true; return; }
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  e.preventDefault();
+  if (!hits.length) return;
+  active = (active + (e.key === "ArrowDown" ? 1 : hits.length - 1)) % hits.length;
+  [...box.children].forEach((el, k) => el.classList.toggle("on", k === active));
+});
+box.addEventListener("click", () => { q.value = ""; box.hidden = true; });
+document.addEventListener("click", e => { if (!e.target.closest(".search")) box.hidden = true; });
+document.addEventListener("keydown", e => {
+  // Arrow keys step through the deck, unless you're typing somewhere.
+  if (onDeck() && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    const by = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    const n = app.querySelectorAll(".pick").length;
+    if (by && deck.sel + by >= 0 && deck.sel + by < n) { e.preventDefault(); deckStep(by); return; }
+  }
+  if (e.key === "/" && document.activeElement !== q) { e.preventDefault(); q.focus(); }
+});
+document.getElementById("random").addEventListener("click", () => {
+  const pool = CARDS.map((c, i) => i).filter(i => better[i].some(allowed) || worse[i].some(allowed) || nearlyBetter[i].length || nearlyWorse[i].length);
+  go(pool[Math.floor(Math.random() * pool.length)]);
+});
+
+route();
+</script>
+</body>
+</html>
