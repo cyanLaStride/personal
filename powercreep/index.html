@@ -38,6 +38,8 @@
   .btn:hover { border-color: var(--accent); }
 
   main { max-width: 1180px; margin: 0 auto; padding: 24px 20px 80px; }
+  /* The card grid uses the whole window. */
+  body.wide main, body.wide .bar { max-width: none; padding-left: 32px; padding-right: 32px; }
   h1 { font-size: 26px; margin: 0 0 6px; line-height: 1.2; }
   h2 { font-size: 17px; margin: 0; }
   .muted { color: var(--muted); }
@@ -140,7 +142,8 @@
   .navlink:hover { color: var(--text); }
   .ugroup { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .ugroup h2 { margin: 0; font-size: 17px; }
-  .ugrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .ugrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+  @media (max-width: 760px) { .ugrid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; } }
   .ugrid a { display: block; border-radius: 4.75% / 3.5%; transition: transform .12s; }
   .ugrid a:hover { transform: translateY(-3px); }
   .ugrid img, .ugrid .ph { width: 100%; height: auto; aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; display: block; }
@@ -599,7 +602,7 @@ function unbeatenView() {
       last = d.k;
     }
     const c = CARDS[d.i];
-    html += `<a href="${link(d.i)}" title="${esc(c[NAME])}">${image(c, "normal")}</a>`;
+    html += `<a href="${link(d.i)}" title="${esc(c[NAME])}">${image(c, "large")}</a>`;
   }
   if (last !== undefined) html += "</div>";
   const rest = list.length - limit;
@@ -949,6 +952,7 @@ function render() {
   const m = location.hash.match(/^#\/card\/(.+)$/);
   const i = m ? byName.get(decodeURIComponent(m[1]).toLowerCase()) : undefined;
   hideTip();
+  document.body.classList.toggle("wide", location.hash.startsWith("#/unbeaten"));
   if (onDeck()) deckView(); else if (location.hash.startsWith("#/charts")) chartsView();
   else if (location.hash.startsWith("#/unbeaten")) unbeatenView();
   else if (i === undefined) homeView(); else cardView(i);
