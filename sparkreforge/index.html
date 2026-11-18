@@ -172,6 +172,7 @@
     </div>
     <div class="panel rec" id="rec"></div>
     <div class="actions">
+      <button class="btn" id="export">Export card image</button>
       <button class="btn" id="copy">Copy as text</button>
       <button class="btn" id="share">Copy share link</button>
       <button class="btn" id="clear">Start over</button>
@@ -703,6 +704,187 @@ function showCostError() {
 }
 $("oCost").addEventListener("input", e => { state.oCost = e.target.value; showCostError(); writeHash(); renderBuilder(); });
 $("oLoy").addEventListener("input", e => { state.oLoy = e.target.value; writeHash(); renderBuilder(); });
+// ---------- Card image export: 2.5 × 3.5 inches at 300 DPI ----------
+const CW = 750, CH = 1050;
+const FRAME = { W: "#efe8d2", U: "#9fc9e8", B: "#3a3634", R: "#e3a184", G: "#9dc59a", gold: "#dcc27a", none: "#c4c4c4" };
+const symCache = new Map();
+// Scryfall's SVGs have no fixed size, which some browsers (Firefox) won't draw onto a canvas,
+// so fetch the file and give it one. If that fails, load it as a plain cross-origin image,
+// which Chrome and Safari can draw. "no-cache" stops the browser reusing the copy the page
+// already showed, which may have been stored without permission to draw it.
+const loadImg = (src, cors) => new Promise((ok, bad) => {
+  const img = new Image(); if (cors) img.crossOrigin = "anonymous";
+  img.onload = () => ok(img); img.onerror = () => bad(new Error("image failed: " + src)); img.src = src;
+});
+function symbolImage(sym) {
+  const file = sym.toUpperCase().replace(/\//g, "");
+  const url = `https://svgs.scryfall.io/card-symbols/${file}.svg`;
+  if (!symCache.has(file)) symCache.set(file, fetch(url, { mode: "cors", cache: "no-cache" })
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+    .then(t => loadImg(URL.createObjectURL(new Blob([t.replace(/<svg\b(?![^>]*\bwidth=)/, '<svg width="100" height="100"')], { type: "image/svg+xml" }))))
+    .catch(() => loadImg(url + "?canvas", true)));
+  return symCache.get(file);
+}
+async function loadSymbols(texts) {
+  const syms = new Set(texts.flatMap(t => (t.match(/\{[^}]+\}/g) || []).map(x => x.slice(1, -1))));
+  const out = new Map();
+  await Promise.all([...syms].map(async x => { try { out.set(x, await symbolImage(x)); } catch (e) {} }));
+  return out;
+}
+// Lay text out in lines, keeping mana symbols inline. Returns lines of drawable pieces.
+function layout(ctx, text, size, width, syms) {
+  const sw = size * 0.92, lines = [];
+  for (const para of text.split("\n")) {
+    let line = [], w = 0;
+    for (const word of para.split(/ +/)) {
+      const parts = word.split(/(\{[^}]+\})/).filter(Boolean).map(p => /^\{.+\}$/.test(p)
+        ? (syms.has(p.slice(1, -1)) ? { sym: p.slice(1, -1), w: sw + 2 } : { text: p, w: ctx.measureText(p).width })
+        : { text: p, w: ctx.measureText(p).width });
+      const ww = parts.reduce((t, p) => t + p.w, 0), space = line.length ? ctx.measureText(" ").width : 0;
+      if (line.length && w + space + ww > width) { lines.push(line); line = []; w = 0; }
+      else if (line.length) { line.push({ text: " ", w: space }); w += space; }
+      line.push(...parts); w += ww;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+function drawLines(ctx, lines, x, y, size, lh, syms) {
+  for (const line of lines) {
+    let cx = x;
+    for (const p of line) {
+      if (p.sym) { const img = syms.get(p.sym); if (img) ctx.drawImage(img, cx + 1, y - size * 0.8, size * 0.92, size * 0.92); else ctx.fillText(`{${p.sym}}`, cx, y); }
+      else ctx.fillText(p.text, cx, y);
+      cx += p.w;
+    }
+    y += lh;
+  }
+  return y;
+}
+function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function badgePath(ctx, kind, x, y, w, h) {
+  ctx.beginPath();
+  const t = h * 0.2;
+  if (kind === "p") { ctx.moveTo(x, y + t); ctx.lineTo(x + w / 2, y); ctx.lineTo(x + w, y + t); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); }
+  else if (kind === "m") { ctx.moveTo(x, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h - t); ctx.lineTo(x + w / 2, y + h); ctx.lineTo(x, y + h - t); }
+  else ctx.rect(x, y, w, h);
+  ctx.closePath();
+}
+// PNGs say nothing about print size unless told; add a pHYs chunk saying 300 DPI.
+function pngWithDpi(buf, dpi) {
+  const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = bytes => { let c = 0xffffffff; for (const b of bytes) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const ppm = Math.round(dpi / 0.0254), chunk = new Uint8Array(21), dv = new DataView(chunk.buffer);
+  dv.setUint32(0, 9); chunk.set([0x70, 0x48, 0x59, 0x73], 4); dv.setUint32(8, ppm); dv.setUint32(12, ppm); chunk[16] = 1;
+  dv.setUint32(17, crc(chunk.subarray(4, 17)));
+  const src = new Uint8Array(buf), at = 33; // right after the IHDR chunk
+  const out = new Uint8Array(src.length + 21);
+  out.set(src.subarray(0, at)); out.set(chunk, at); out.set(src.subarray(at), at + 21);
+  return out;
+}
+async function exportCard() {
+  if (!state.picks.length) { toast("Add some abilities first"); return; }
+  const rec = effective(recommend(state.picks));
+  const picks = sortedPicks().map(k => BY_KEY.get(k));
+  const name = state.name.trim() || "Unnamed planeswalker";
+  const typeLine = "Legendary Planeswalker" + (state.type ? " — " + state.type : "");
+  const comp = rec.phyrexian ? compleatedText(rec.phyrexian, rec.phyN) : "";
+  const texts = picks.map(a => customText(a));
+  const syms = await loadSymbols([rec.cost, comp, ...texts]);
+  const cv = document.createElement("canvas"); cv.width = CW; cv.height = CH;
+  const ctx = cv.getContext("2d");
+  const serif = 'Georgia, "Times New Roman", serif';
+  const cols = (parseCost(rec.cost) || {}).colours || [];
+  const frame = cols.length === 0 ? FRAME.none : cols.length === 1 ? FRAME[cols[0]] : FRAME.gold;
+  const dark = frame === FRAME.B, bar = dark ? "rgba(255,255,255,.72)" : "rgba(255,255,255,.55)";
+
+  // Border and frame
+  ctx.fillStyle = "#111"; ctx.fillRect(0, 0, CW, CH);
+  ctx.fillStyle = frame; roundRect(ctx, 34, 34, CW - 68, CH - 112, 18); ctx.fill();
+  // Name bar
+  ctx.fillStyle = bar; roundRect(ctx, 50, 50, CW - 100, 76, 38); ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = 2; ctx.stroke();
+  const costSyms = (rec.cost.match(/\{[^}]+\}/g) || []).map(x => x.slice(1, -1)), cs = 40;
+  let cx = CW - 72 - costSyms.length * (cs + 3);
+  for (const x of costSyms) { const img = syms.get(x); if (img) ctx.drawImage(img, cx, 68, cs, cs); cx += cs + 3; }
+  ctx.fillStyle = "#111"; let ns = 40;
+  do { ctx.font = `bold ${ns}px ${serif}`; ns -= 1; } while (ctx.measureText(name).width > CW - 160 - costSyms.length * (cs + 3) && ns > 18);
+  ctx.textBaseline = "alphabetic"; ctx.fillText(name, 76, 102);
+  // Type line
+  ctx.fillStyle = bar; roundRect(ctx, 50, 140, CW - 100, 60, 30); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#111"; let ts = 30;
+  do { ctx.font = `bold ${ts}px ${serif}`; ts -= 1; } while (ctx.measureText(typeLine).width > CW - 160 && ts > 14);
+  ctx.fillText(typeLine, 76, 180);
+  // Text box
+  const box = { x: 50, y: 216, w: CW - 100, h: CH - 216 - 150 };
+  ctx.fillStyle = dark ? "rgba(255,255,255,.84)" : "rgba(255,255,255,.72)"; roundRect(ctx, box.x, box.y, box.w, box.h, 14); ctx.fill(); ctx.stroke();
+  const badgeW = 84, gap = 18, textX = box.x + 16 + badgeW + gap, textW = box.x + box.w - 22 - textX;
+  // Largest font size that fits everything.
+  let size = 40, plan;
+  for (; size >= 14; size -= 1) {
+    ctx.font = `italic ${size * 0.85}px ${serif}`;
+    const compLines = comp ? layout(ctx, comp, size * 0.85, box.w - 40, syms) : [];
+    ctx.font = `${size}px ${serif}`;
+    const lh = size * 1.22;
+    const blocks = texts.map(t => layout(ctx, t, size, textW, syms));
+    const need = 24 + compLines.length * size * 0.85 * 1.22 + (comp ? 16 : 0)
+      + blocks.reduce((t, b) => t + Math.max(b.length * lh, 62) + 20, 0);
+    plan = { lh, compLines, blocks };
+    if (need <= box.h) break;
+  }
+  let y = box.y + 22;
+  ctx.fillStyle = "#111";
+  if (comp) {
+    ctx.font = `italic ${size * 0.85}px ${serif}`;
+    y = drawLines(ctx, plan.compLines, box.x + 20, y + size * 0.85, size * 0.85, size * 0.85 * 1.22, syms) - size * 0.85 + 16;
+  }
+  // Spread the abilities evenly down the box, like a printed card.
+  const heights = plan.blocks.map(b => Math.max(b.length * plan.lh, 62));
+  const spare = box.y + box.h - 12 - y - heights.reduce((t, h) => t + h, 0);
+  const step = Math.max(20, spare / picks.length);
+  picks.forEach((a, i) => {
+    const top = y + (step - 20) / 2 > y ? y + Math.min((step - 20) / 2, 30) : y;
+    const bh = 56, by = top + Math.max(0, (Math.min(heights[i], plan.lh * 2) - bh) / 2);
+    badgePath(ctx, costKind(a.cost), box.x + 16, by, badgeW, bh);
+    ctx.fillStyle = "#1c1c1c"; ctx.fill(); ctx.strokeStyle = "#bbb"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.font = `bold 32px ${serif}`; ctx.textAlign = "center";
+    ctx.fillText(a.cost, box.x + 16 + badgeW / 2, by + bh / 2 + 11 + (costKind(a.cost) === "p" ? 4 : costKind(a.cost) === "m" ? -4 : 0));
+    ctx.textAlign = "left"; ctx.fillStyle = "#111"; ctx.font = `${size}px ${serif}`;
+    drawLines(ctx, plan.blocks[i], textX, top + size, size, plan.lh, syms);
+    y += heights[i] + step;
+    if (i < picks.length - 1) {
+      const ly = y - step / 2 - 2;
+      ctx.strokeStyle = "rgba(0,0,0,.18)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(box.x + 20, ly); ctx.lineTo(box.x + box.w - 20, ly); ctx.stroke();
+    }
+  });
+  // Loyalty shield
+  if (rec.loyalty !== null) {
+    const sx = CW - 170, sy = CH - 172, sw = 112, sh = 104;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + sw, sy); ctx.lineTo(sx + sw, sy + sh * 0.6);
+    ctx.quadraticCurveTo(sx + sw, sy + sh, sx + sw / 2, sy + sh); ctx.quadraticCurveTo(sx, sy + sh, sx, sy + sh * 0.6); ctx.closePath();
+    ctx.fillStyle = "#1c1c1c"; ctx.fill(); ctx.strokeStyle = "#ddd"; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.font = `bold 54px ${serif}`; ctx.textAlign = "center";
+    ctx.fillText(String(rec.loyalty), sx + sw / 2, sy + 68); ctx.textAlign = "left";
+  }
+  // Footer: where the abilities came from
+  const srcs = [...new Set(picks.map(a => WALKERS[a.w].n))];
+  ctx.fillStyle = "#ddd"; let fs = 19;
+  const credit = "abilities from " + srcs.join(" · ");
+  do { ctx.font = `${fs}px ${serif}`; fs -= 1; } while (ctx.measureText(credit).width > CW - 270 && fs > 11);
+  ctx.fillText(credit, 50, CH - 56);
+  ctx.font = `16px ${serif}`; ctx.fillStyle = "#aaa";
+  ctx.fillText("made with spark(re)forge · cyanlastride.ca/sparkreforge", 50, CH - 30);
+
+  const blob = await new Promise(ok => cv.toBlob(ok, "image/png"));
+  const png = new Blob([pngWithDpi(await blob.arrayBuffer(), 300)], { type: "image/png" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(png);
+  a.download = (name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "planeswalker") + ".png";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast("Card image saved");
+}
+$("export").addEventListener("click", () => exportCard().catch(e => { console.error(e); toast("Couldn't make the image, sorry"); }));
 $("copy").addEventListener("click", () => copy(cardText(), "Card text copied"));
 $("share").addEventListener("click", () => copy(location.href, "Link copied. Anyone who opens it sees this planeswalker."));
 $("clear").addEventListener("click", () => {
