@@ -6,15 +6,18 @@
     <!-- css  -->
     <link rel="stylesheet" href="style.css">
     <style>
-        /* The poems' line breaks matter: never wrap them. On narrow screens, shrink them
-           until the widest line (89 characters) fits instead. */
-        .poems { display: block; white-space: pre; font-size: min(1em, calc(96vw / 55)); }
+        /* The poems' line breaks matter: never wrap them. On narrow screens, shrink each poem
+           just enough that its widest line fits. A monospace character is about 0.6em wide and
+           the page has a 2% margin on each side, hence 96vw. */
+        .poems { display: block; white-space: pre; }
+        .poems.first { font-size: min(1em, calc(96vw / 27)); }  /* widest line: 43 characters */
+        .poems.second { font-size: min(1em, calc(96vw / 55)); } /* widest line: 89 characters */
     </style>
 </head>
 <body>
     <h1><a href="index.html" style="color: #008282;" class="topTitle"><img src="LaStrideSymbol.png" style="height:54px;">cyanLaStride</a></h1>
     <h2>murderers</h2>
-<span class="poems">
+<span class="poems first">
 <span style="color:black">In Flanders fields the poppies blow
 Between the crosses, row on row,
     That mark </span>our<span style="color:black"> place; and in the sky
@@ -41,8 +44,8 @@ This poem is about killing people.
 We should remember this, as we honour them.
 They do not sleep.
 
-==================================================
-
+===========================================
+</span><span class="poems second">
 <span style="color:black">Thank you very much. Wow. Well, I want to thank you all very much. This is 
 great. </span>These are our friends.<span style="color:black"> We have thousands of friends in this incredible 
 movement. </span>This is a movement<span style="color:black"> like nobody's ever </span>seen before.<span style="color:black"> And, frankly, this 
