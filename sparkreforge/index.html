@@ -117,6 +117,19 @@
            padding: 8px 14px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 30; }
   .toast.show { opacity: 1; }
 
+  /* Examples, shown only while the builder is empty */
+  .examples { border: 3px solid var(--hover); animation: glow 2.4s ease-in-out infinite; }
+  @keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(0,255,255,0); } 50% { box-shadow: 0 0 18px 2px rgba(0,255,255,.45); } }
+  @media (prefers-reduced-motion: reduce) { .examples { animation: none; } }
+  .exhead { background: var(--hover); color: #000; font-weight: 700; padding: 6px 10px; }
+  .exgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px; }
+  .ex { text-align: left; background: #000; border: 1px solid var(--teal); padding: 7px 9px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+  .ex:hover { border-color: var(--hover); }
+  .ex:hover .exname { color: var(--hover); }
+  .ex .exname { font-weight: 700; }
+  .ex .exmeta { font-size: 13px; color: var(--muted); }
+  .ex .ms { width: 15px; height: 15px; }
+  .ex.wide { grid-column: 1 / -1; }
   #peek { position: fixed; z-index: 40; width: 244px; border: 3px solid var(--teal); pointer-events: none; display: none; }
   footer { margin-top: 24px; color: var(--muted); font-size: 14px; }
 </style>
@@ -149,6 +162,10 @@
   </section>
 
   <aside id="builder">
+    <div id="examples" class="examples" hidden>
+      <div class="exhead">not sure where to start? load an example</div>
+      <div class="exgrid" id="exgrid"></div>
+    </div>
     <div class="panel">
       <label class="field"><span>Name</span><input id="name" placeholder="Name your planeswalker" maxlength="80"></label>
       <label class="field"><span>Planeswalker type</span><input id="type" list="types" placeholder="e.g. Yahenni" maxlength="40"></label>
@@ -597,6 +614,7 @@ function cardText() {
 const sortedPicks = () => [...state.picks].sort((x, y) => costNum(BY_KEY.get(y).cost) - costNum(BY_KEY.get(x).cost));
 
 function renderBuilder() {
+  renderExamples();
   $("cName").textContent = state.name || "Your planeswalker";
   $("cType").textContent = "Legendary Planeswalker" + (state.type ? " — " + state.type : "");
   const picks = sortedPicks();
@@ -655,6 +673,42 @@ function renderBuilder() {
       <p>It's a rough guide, not a balance check. Two abilities that were fine apart can be broken together.</p>
     </details>`;
 }
+
+// ---------- Examples ----------
+const EXAMPLES = [
+  { n: "Ferrin, the Unmade", a: "09ab127800,a20dd48d01,09ab127802", blurb: "colourless artifacts" },
+  { n: "Seraphine, Banner of Dawn", a: "05e6b24300,dfb5f66001,05e6b24302", blurb: "white tokens" },
+  { n: "Orrin, Tidereader", a: "4a4dc13300,7f77a84e02,20dbfc9a02", blurb: "blue spells" },
+  { n: "Morvane, Undying Ascendant", a: "79a1783f01,7fca595e01,64a9a6b402", blurb: "black recursion" },
+  { n: "Ignis, Ashen Herald", a: "12cc800c00,12cc800c02,68e1274802", blurb: "red burn" },
+  { n: "Thessa, Wildroot", a: "b0f36bf700,186b4def01,186b4def02", blurb: "green creatures" },
+  { n: "Brokk, Rules Lawyer", a: "60c6092301,ae7604bb01,108ae90a00", blurb: "the busted one", wide: true },
+];
+const isEmpty = () => !state.name.trim() && !state.type && !state.picks.length && !state.colours.length
+  && state.phyrexian === "auto" && !state.oCost.trim() && String(state.oLoy).trim() === "";
+function renderExamples() {
+  const box = $("examples");
+  box.hidden = !isEmpty();
+  if (box.hidden || $("exgrid").childElementCount) return;
+  $("exgrid").innerHTML = EXAMPLES.map((e, i) => {
+    const keys = e.a.split(",").filter(k => BY_KEY.has(k));
+    const rec = keys.length ? recommend(keys) : null;
+    return `<button class="ex${e.wide ? " wide" : ""}" data-i="${i}"><span class="exname">${esc(e.n)}</span>
+      <span class="exmeta">${rec ? symbols(rec.cost) + " · loyalty " + (rec.loyalty ?? "?") + " · " : ""}${esc(e.blurb)}</span></button>`;
+  }).join("");
+}
+$("exgrid").addEventListener("click", ev => {
+  const b = ev.target.closest(".ex"); if (!b) return;
+  const e = EXAMPLES[+b.dataset.i];
+  history.replaceState(null, "", "#" + new URLSearchParams({ n: e.n, a: e.a }).toString());
+  readHash();
+  if (!state.typeEdited && state.name) state.type = short(state.name.trim());
+  $("name").value = state.name; $("type").value = state.type;
+  $("oCost").value = state.oCost; $("oLoy").value = state.oLoy; showCostError();
+  renderPicker(); renderPhy();
+  update();
+  toast(`Loaded ${e.n}`);
+});
 
 function update() { writeHash(); renderBuilder(); renderList(); }
 
