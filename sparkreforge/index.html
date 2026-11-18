@@ -674,14 +674,14 @@ function renderBuilder() {
     </details>`;
 }
 
-// ---------- Examples ----------
+// ---------- Examples (each uses abilities from three different planeswalkers) ----------
 const EXAMPLES = [
-  { n: "Ferrin, the Unmade", a: "09ab127800,a20dd48d01,09ab127802", blurb: "colourless artifacts" },
-  { n: "Seraphine, Banner of Dawn", a: "05e6b24300,dfb5f66001,05e6b24302", blurb: "white tokens" },
+  { n: "Ferrin, the Unmade", a: "09ab127800,a20dd48d01,0eb11b2d02", blurb: "colourless artifacts" },
+  { n: "Seraphine, Banner of Dawn", a: "05e6b24300,dfb5f66001,497d7ab802", blurb: "white tokens" },
   { n: "Orrin, Tidereader", a: "4a4dc13300,7f77a84e02,20dbfc9a02", blurb: "blue spells" },
   { n: "Morvane, Undying Ascendant", a: "79a1783f01,7fca595e01,64a9a6b402", blurb: "black recursion" },
-  { n: "Ignis, Ashen Herald", a: "12cc800c00,12cc800c02,68e1274802", blurb: "red burn" },
-  { n: "Thessa, Wildroot", a: "b0f36bf700,186b4def01,186b4def02", blurb: "green creatures" },
+  { n: "Ignis, Ashen Herald", a: "12cc800c00,882619f702,68e1274802", blurb: "red burn" },
+  { n: "Thessa, Wildroot", a: "b0f36bf700,186b4def01,b5f20a6d02", blurb: "green creatures" },
   { n: "Brokk, Rules Lawyer", a: "60c6092301,ae7604bb01,108ae90a00", blurb: "the busted one", wide: true },
 ];
 const isEmpty = () => !state.name.trim() && !state.type && !state.picks.length && !state.colours.length
