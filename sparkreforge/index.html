@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>spark(re)forge</title>
+<link rel="icon" type="image/x-icon" href="../favicon.ico">
+<style>
+  /* Colours and type from cyanlastride.ca's style.css */
+  :root {
+    --bg: #000; --text: #fff; --muted: #a0a0a0; --line: #333;
+    --teal: #008282; --red: #e00707; --hover: cyan; --warn: #e6c27a;
+    --plus: #008282; --minus: #e00707; --zero: #555;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 2%; background: var(--bg); color: var(--text); font-family: monospace; font-size: 16px; line-height: 1.45; }
+  a { color: var(--red); text-decoration: none; }
+  a:hover { color: var(--hover); }
+  button, input, select { font: inherit; color: inherit; }
+  .ms { width: 1em; height: 1em; vertical-align: -0.12em; margin: 0 1px; }
+
+  h1 { font-size: 36px; color: var(--teal); margin: 0 0 4px; }
+  h1 a, h1 a:hover { color: var(--teal); }
+  .topTitle { display: flex; height: 54px; align-items: center; }
+  h2 { font-size: 28px; color: var(--teal); margin: 18px 0 6px; }
+  .tag { margin: 0 0 18px; }
+
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 24px; align-items: start; }
+  @media (max-width: 900px) {
+    main { grid-template-columns: minmax(0, 1fr); }
+    #builder { order: -1; position: static !important; max-height: none !important; }
+    h1 { font-size: 28px; } h2 { font-size: 22px; }
+  }
+
+  /* Controls: square, black, teal edges; cyan on hover */
+  input, select { background: #000; border: 1px solid var(--teal); border-radius: 0; outline: none; }
+  input:focus, select:focus { border-color: var(--hover); }
+  input::placeholder { color: #6a6a6a; }
+  .chip, .btn, .add { background: #000; border: 1px solid var(--teal); border-radius: 0; cursor: pointer; }
+  .chip:hover, .btn:hover, .add:hover { border-color: var(--hover); color: var(--hover); }
+  .chip.on { background: var(--teal); color: #fff; }
+  .chip.on:hover { color: #fff; }
+
+  /* Ability browser */
+  .filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-bottom: 12px; }
+  .filters input[type=search] { flex: 1 1 260px; padding: 8px 10px; }
+  .chips { display: inline-flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .chips .lbl { color: var(--muted); font-size: 14px; margin-right: 2px; }
+  .chip { padding: 2px 9px; font-size: 14px; display: inline-flex; align-items: center; gap: 3px; }
+  .chip .ms { width: 16px; height: 16px; margin: 0; }
+  select { padding: 4px 6px; }
+  label.check { font-size: 14px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+  input[type=checkbox] { accent-color: var(--teal); }
+  .count { color: var(--muted); font-size: 14px; margin: 0 0 8px; }
+
+  .list { display: flex; flex-direction: column; }
+  .ab { border-top: 1px solid var(--line); padding: 10px 2px;
+        display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; }
+  .ab:last-child { border-bottom: 1px solid var(--line); }
+  .ab .txt { white-space: pre-line; }
+  .ab .src { grid-column: 2 / 4; font-size: 14px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+  .flag { font-size: 12px; border: 1px solid var(--muted); padding: 0 4px; }
+  .add { padding: 3px 10px; white-space: nowrap; }
+  .ab.added .add { background: var(--teal); }
+
+  /* Loyalty cost badge */
+  .cost { min-width: 46px; height: 28px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center;
+          font-weight: 700; font-size: 15px; color: #fff; font-variant-numeric: tabular-nums; }
+  .cost.p { background: var(--plus); clip-path: polygon(0 18%, 50% 0, 100% 18%, 100% 100%, 0 100%); padding-top: 4px; }
+  .cost.m { background: var(--minus); clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%); padding-bottom: 4px; }
+  .cost.z { background: var(--zero); }
+  .shield { display: inline-flex; align-items: center; gap: 4px; }
+  .shield b { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 20px; padding: 0 4px;
+              border: 1px solid var(--muted); color: var(--text); font-size: 13px; }
+
+  /* Builder */
+  #builder { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; display: flex; flex-direction: column; gap: 14px; }
+  .panel { border: 3px solid var(--teal); padding: 14px; }
+  .field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; }
+  .field > span { font-size: 14px; color: var(--teal); }
+  .field input { padding: 7px 9px; }
+  .mismatch { color: var(--warn); }
+  .overrides { display: grid; grid-template-columns: 1fr 120px; gap: 10px; align-items: end; }
+  .overrides .field input { width: 100%; }
+  .opt { font-style: normal; color: var(--muted); }
+
+  .card { border: 3px solid var(--teal); padding: 10px; }
+  .card .top { display: flex; justify-content: space-between; gap: 8px; align-items: center; font-weight: 700;
+               border-bottom: 1px solid var(--line); padding: 2px 2px 8px; }
+  .card .top .ms { width: 18px; height: 18px; }
+  .card .typeline { margin: 0 0 8px; padding: 6px 2px; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .card .abs { display: flex; flex-direction: column; gap: 8px; min-height: 80px; }
+  .card .empty { color: var(--muted); font-size: 14px; padding: 18px 8px; text-align: center; }
+  .cab { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: start; }
+  .cab .t { white-space: pre-line; font-size: 15px; }
+  .cab .from { grid-column: 2; font-size: 13px; color: var(--muted); }
+  .x { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 4px; }
+  .x:hover { color: var(--hover); }
+  .card .bottom { display: flex; justify-content: flex-end; margin-top: 8px; }
+  .bigshield { min-width: 44px; height: 40px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px;
+               background: #fff; color: #000; border-radius: 0 0 22px 22px; padding: 0 8px; }
+
+  .rec h3 { margin: 0 0 6px; font-size: 20px; color: var(--teal); font-weight: 700; }
+  .rec .big { display: flex; gap: 8px 22px; flex-wrap: wrap; margin-bottom: 6px; }
+  .rec .big b { font-size: 18px; }
+  .rec .big .ms { width: 18px; height: 18px; }
+  .rec ul { margin: 6px 0 0; padding-left: 18px; font-size: 14px; color: var(--muted); }
+  .rec li { list-style: square; }
+  .rec li.warn { color: var(--warn); }
+  details { font-size: 14px; color: var(--muted); margin-top: 8px; }
+  details summary { cursor: pointer; color: var(--red); }
+  details summary:hover { color: var(--hover); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { padding: 5px 12px; }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #000; border: 3px solid var(--teal);
+           padding: 8px 14px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 30; }
+  .toast.show { opacity: 1; }
+
+  #peek { position: fixed; z-index: 40; width: 244px; border: 3px solid var(--teal); pointer-events: none; display: none; }
+  footer { margin-top: 24px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<h1><a href="../index.html" class="topTitle"><img src="../LaStrideSymbol.png" alt="" style="height:54px;">cyanLaStride</a></h1>
+<h2>spark(re)forge</h2>
+<p class="tag">build a planeswalker out of loyalty abilities that have already been printed.</p>
+
+<main>
+  <section>
+    <div class="filters">
+      <input type="search" id="q" placeholder="Search ability text or planeswalker name…" autocomplete="off">
+      <span class="chips" id="kinds"><span class="lbl">Cost</span></span>
+      <span class="chips" id="colors"><span class="lbl">Colour</span></span>
+      <label class="check">Sort
+        <select id="sort">
+          <option value="cost">Loyalty cost</option>
+          <option value="name">Planeswalker name</option>
+          <option value="mv">Planeswalker mana value</option>
+          <option value="loy">Starting loyalty</option>
+        </select></label>
+      <label class="check"><input type="checkbox" id="un"> Un-sets &amp; playtest cards</label>
+      <label class="check"><input type="checkbox" id="dig"> Digital-only (Alchemy)</label>
+      <label class="check" title="Planeswalkers on cards that transform or meld"><input type="checkbox" id="flip"> Flipwalkers</label>
+      <label class="check" title="Planeswalkers that first appeared in a Universes Beyond or Dungeons &amp; Dragons crossover set"><input type="checkbox" id="ub"> Universes Beyond</label>
+    </div>
+    <p class="count" id="count"></p>
+    <div class="list" id="list"></div>
+  </section>
+
+  <aside id="builder">
+    <div class="panel">
+      <label class="field"><span>Name</span><input id="name" placeholder="Name your planeswalker" maxlength="80"></label>
+      <label class="field"><span>Planeswalker type</span><input id="type" list="types" placeholder="e.g. Yahenni" maxlength="40"></label>
+      <datalist id="types"></datalist>
+      <div class="field"><span>Colours <i id="colMode" class="opt">(automatic)</i></span>
+        <div class="chips" id="pick"></div></div>
+      <div class="field"><span title="Phyrexian mana can be paid with 2 life instead. Each one paid that way costs the planeswalker two loyalty.">Phyrexian mana (Compleated)</span>
+        <div class="chips" id="phy"><button class="chip" data-p="auto" title="Bring Phyrexian mana over from the source planeswalkers">Auto</button><button class="chip" data-p="yes">Yes</button><button class="chip" data-p="no">No</button></div></div>
+      <div class="overrides">
+        <label class="field"><span>Your mana cost <i class="opt">(optional)</i></span><input id="oCost" placeholder="" maxlength="60" autocomplete="off"></label>
+        <label class="field"><span>Your loyalty <i class="opt">(optional)</i></span><input id="oLoy" type="number" min="0" max="20" placeholder=""></label>
+      </div>
+      <div id="oErr" class="mismatch" style="font-size:13px;margin:-6px 0 10px;display:none"></div>
+      <div class="card">
+        <div class="top"><span id="cName">Your planeswalker</span><span id="cCost"></span></div>
+        <div class="typeline" id="cType">Legendary Planeswalker</div>
+        <div class="cab" id="cComp" style="display:none;margin-bottom:6px;font-size:14px"></div>
+        <div class="abs" id="cAbs"></div>
+        <div class="bottom"><span class="bigshield" id="cLoy">–</span></div>
+      </div>
+    </div>
+    <div class="panel rec" id="rec"></div>
+    <div class="actions">
+      <button class="btn" id="copy">Copy as text</button>
+      <button class="btn" id="share">Copy share link</button>
+      <button class="btn" id="clear">Start over</button>
+    </div>
+  </aside>
+</main>
+<footer>card data from Scryfall. Magic: The Gathering is © Wizards of the Coast. not affiliated with either.<br><br><a href="../index.html">Back</a></footer>
+<img id="peek" alt="">
+<div class="toast" id="toast"></div>
+
+<script src="data.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+const symbols = s => esc(s).replace(/\{([^}]+)\}/g, (m, sym) => {
+  const file = sym.toUpperCase().replace(/\//g, "");
+  return `<img class="ms" alt="{${sym.toUpperCase()}}" src="https://svgs.scryfall.io/card-symbols/${file}.svg">`;
+});
+const BY_KEY = new Map(ABILITIES.map(a => [a.k, a]));
+// Loyalty cost as a number for sorting and maths: X counts as zero.
+const costNum = c => c === "0" ? 0 : (c[0] === "−" ? -1 : 1) * (parseInt(c.replace(/[+−]/, ""), 10) || 0);
+const costKind = c => c[0] === "+" ? "p" : c[0] === "−" ? "m" : "z";
+const costBadge = c => `<span class="cost ${costKind(c)}">${esc(c)}</span>`;
+const loyNum = l => /^\d+$/.test(l) ? +l : null;
+const short = name => {
+  const s = name.split(",")[0].trim();
+  if (s !== name) return s;
+  const m = name.match(/^(.+?) (the|of) /i);
+  if (m) return m[1];
+  const words = name.split(/\s+/).filter(x => !/^(the|a|an)$/i.test(x));
+  return words[0] || name;
+};
+
+// ---------- State ----------
+const state = { name: "", type: "", typeEdited: false, picks: [], colours: [], phyrexian: "auto", oCost: "", oLoy: "" };
+const filt = { q: "", kind: "", colors: new Set(), sort: "cost", un: false, dig: false, flip: false, ub: false };
+
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  state.name = h.get("n") || "";
+  state.type = h.get("t") || "";
+  state.typeEdited = !!h.get("t");
+  state.picks = (h.get("a") || "").split(",").filter(k => BY_KEY.has(k));
+  const c = (h.get("c") || "").toUpperCase();
+  state.phyrexian = { "1": "yes", "0": "no" }[h.get("p")] || "auto";
+  state.oCost = h.get("oc") || ""; state.oLoy = h.get("ol") || "";
+  state.colours = c === "C" ? ["C"] : [...new Set(c.split("").filter(x => "WUBRG".includes(x)))];
+}
+function writeHash() {
+  const h = new URLSearchParams();
+  if (state.name) h.set("n", state.name);
+  if (state.typeEdited && state.type) h.set("t", state.type);
+  if (state.picks.length) h.set("a", state.picks.join(","));
+  if (state.colours.length) h.set("c", state.colours.join(""));
+  if (state.phyrexian !== "auto") h.set("p", state.phyrexian === "yes" ? "1" : "0");
+  if (state.oCost.trim()) h.set("oc", state.oCost.trim());
+  if (state.oLoy !== "") h.set("ol", state.oLoy);
+  const s = h.toString();
+  history.replaceState(null, "", s ? "#" + s : location.pathname + location.search);
+}
+
+// ---------- Filters ----------
+const KINDS = [["", "All"], ["p", "+"], ["z", "0"], ["m", "−"], ["u", "−6 or more"]];
+$("kinds").insertAdjacentHTML("beforeend", KINDS.map(([k, l]) => `<button class="chip${k === "" ? " on" : ""}" data-k="${k}">${l}</button>`).join(""));
+$("kinds").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  filt.kind = b.dataset.k;
+  for (const c of $("kinds").querySelectorAll(".chip")) c.classList.toggle("on", c === b);
+  renderList();
+});
+$("colors").insertAdjacentHTML("beforeend", ["W", "U", "B", "R", "G", "C"].map(c =>
+  `<button class="chip" data-c="${c}" title="${{W:"White",U:"Blue",B:"Black",R:"Red",G:"Green",C:"Colourless"}[c]}">${symbols("{" + c + "}")}</button>`).join(""));
+$("colors").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  const c = b.dataset.c;
+  filt.colors.has(c) ? filt.colors.delete(c) : filt.colors.add(c);
+  b.classList.toggle("on", filt.colors.has(c));
+  renderList();
+});
+let qTimer;
+$("q").addEventListener("input", e => { clearTimeout(qTimer); qTimer = setTimeout(() => { filt.q = e.target.value.trim().toLowerCase(); renderList(); }, 120); });
+$("sort").addEventListener("change", e => { filt.sort = e.target.value; renderList(); });
+$("un").addEventListener("change", e => { filt.un = e.target.checked; renderList(); });
+$("dig").addEventListener("change", e => { filt.dig = e.target.checked; renderList(); });
+$("flip").addEventListener("change", e => { filt.flip = e.target.checked; renderList(); });
+$("ub").addEventListener("change", e => { filt.ub = e.target.checked; renderList(); });
+
+function matches(a) {
+  const w = WALKERS[a.w];
+  if (w.flag === "un" && !filt.un) return false;
+  if (w.flag === "digital" && !filt.dig) return false;
+  if (w.flip && !filt.flip) return false;
+  if (w.ub && !filt.ub) return false;
+  if (filt.kind === "u") { if (costNum(a.cost) > -6) return false; }
+  else if (filt.kind && costKind(a.cost) !== filt.kind) return false;
+  if (filt.colors.size) {
+    // A walker shows if its colours are all among the chosen ones (Colourless = no colours).
+    const cols = w.col.split("").filter(Boolean);
+    if (!cols.length ? !filt.colors.has("C") : !cols.every(c => filt.colors.has(c))) return false;
+  }
+  // Every word in the search has to appear somewhere in the ability or the planeswalker's name, in any order.
+  if (filt.q) {
+    const hay = (a.x + " " + w.n).toLowerCase();
+    if (!filt.q.split(/\s+/).every(word => hay.includes(word))) return false;
+  }
+  return true;
+}
+const SORTS = {
+  cost: (a, b) => costNum(b.cost) - costNum(a.cost),
+  name: (a, b) => WALKERS[a.w].n.localeCompare(WALKERS[b.w].n),
+  mv: (a, b) => WALKERS[a.w].mv - WALKERS[b.w].mv,
+  loy: (a, b) => (loyNum(WALKERS[a.w].l) ?? 99) - (loyNum(WALKERS[b.w].l) ?? 99),
+};
+function sourceLine(w) {
+  const flag = w.flag === "un" ? `<span class="flag" title="Silver-border, acorn, playtest or oversized: not legal in normal formats">Un/playtest</span>`
+             : w.flag === "digital" ? `<span class="flag" title="Only exists on MTG Arena">Digital only</span>` : "";
+  const ub = w.ub ? `<span class="flag" title="First appeared in a Universes Beyond or D&amp;D crossover set">Universes Beyond</span>` : "";
+  return `<a href="${esc(w.u)}" target="_blank" rel="noopener" data-img="${esc(w.i)}">${esc(w.n)}</a>
+    <span>${w.c ? symbols(w.c) : "no mana cost"} <span title="Mana value">(MV ${w.mv})</span></span>
+    <span class="shield" title="Starting loyalty">Loyalty <b>${esc(w.l || "?")}</b></span>
+    ${w.note ? `<span>${esc(w.note)}</span>` : ""}${flag}${ub}`;
+}
+function renderList() {
+  const rows = ABILITIES.filter(matches).sort((a, b) => SORTS[filt.sort](a, b) || WALKERS[a.w].n.localeCompare(WALKERS[b.w].n));
+  $("count").textContent = `${rows.length} of ${ABILITIES.length} loyalty abilities`;
+  const picked = new Set(state.picks);
+  $("list").innerHTML = rows.map(a => `<div class="ab${picked.has(a.k) ? " added" : ""}" data-k="${a.k}">
+      ${costBadge(a.cost)}<div class="txt">${symbols(a.x)}</div>
+      <button class="add">${picked.has(a.k) ? "Added ✓" : "Add"}</button>
+      <div class="src">${sourceLine(WALKERS[a.w])}</div></div>`).join("");
+}
+$("list").addEventListener("click", e => {
+  const b = e.target.closest(".add"); if (!b) return;
+  const k = b.closest(".ab").dataset.k;
+  if (state.picks.includes(k)) state.picks = state.picks.filter(x => x !== k);
+  else { state.picks.push(k); toast("Added to your planeswalker"); }
+  update();
+});
+
+// ---------- Recommendation ----------
+const COLOR_ORDER = {
+  W: "W", U: "U", B: "B", R: "R", G: "G",
+  WU: "WU", UB: "UB", BR: "BR", RG: "RG", GW: "GW", WB: "WB", UR: "UR", BG: "BG", RW: "RW", GU: "GU",
+  GWU: "GWU", WUB: "WUB", UBR: "UBR", BRG: "BRG", RGW: "RGW", WBG: "WBG", URW: "URW", BGU: "BGU", RWB: "RWB", GUR: "GUR",
+  WUBR: "WUBR", UBRG: "UBRG", BRGW: "BRGW", RGWU: "RGWU", GWUB: "GWUB", WUBRG: "WUBRG",
+};
+function orderColors(cs) {
+  const key = "WUBRG".split("").filter(c => cs.includes(c)).join("");
+  if (!key) return [];
+  // Find the conventional order: try every rotation of the stored names.
+  for (const k of Object.keys(COLOR_ORDER)) if (k.length === key.length && [...k].every(c => key.includes(c))) return [...COLOR_ORDER[k]];
+  return [...key];
+}
+const phyCount = cost => (cost.match(/\/P\}/g) || []).length;
+const syms = cost => (cost.match(/\{[^}]+\}/g) || []).map(s => s.slice(1, -1));
+const symMV = s => /^\d+$/.test(s) ? +s : s === "X" ? 0 : /^2\//.test(s) ? 2 : 1;
+
+function recommend(picks) {
+  const ws = picks.map(k => WALKERS[BY_KEY.get(k).w]);
+  const n = ws.length;
+  const mvs = ws.map(w => w.mv);
+  const mean = mvs.reduce((s, v) => s + v, 0) / n, max = Math.max(...mvs);
+  let mv = Math.max(1, Math.round((mean + max) / 2 + 0.5 * (n - 3)));
+  // Coloured pips. How many and which colours are worked out separately.
+  // How many: the average number of coloured pips on the source walkers (one per ability).
+  // Which: every colour any source needs, at least one pip each. Extra pips go to the
+  // colour the abilities lean on most; a tie between two colours makes a hybrid pip.
+  const weight = new Map();
+  let pipTotal = 0;
+  for (const w of ws) {
+    for (const s of syms(w.c)) {
+      if (/^(\d+|X)$/.test(s)) continue;
+      // {W/U} counts half to each colour; {U/P} and {2/U} count as {U}; {C} is its own "colour".
+      const cols = s.split("/").filter(p => /^[WUBRGC]$/.test(p));
+      if (!cols.length) continue;
+      pipTotal++;
+      for (const c of cols) weight.set(c, (weight.get(c) || 0) + 1 / cols.length);
+    }
+  }
+  // Colours the user picked override the automatic ones. Colourless means no coloured pips at all.
+  const chosen = state.colours;
+  const colours = chosen.length ? (chosen[0] === "C" ? [] : orderColors(chosen.join("")))
+    : [...orderColors([...weight.keys()].join("")), ...(weight.has("C") ? ["C"] : [])];
+  const pipCount = colours.length ? Math.max(colours.length, Math.round(pipTotal / n)) : 0;
+  const pips = [...colours];
+  const left = new Map(colours.map(c => [c, (weight.get(c) || 0) - 1]));
+  for (let i = colours.length; i < pipCount; i++) {
+    const top = Math.max(...left.values());
+    const tied = colours.filter(c => left.get(c) === top);
+    if (tied.length === 1) { pips.push(tied[0]); left.set(tied[0], top - 1); }
+    else if (tied.length === 2 && !tied.includes("C")) {
+      pips.push(orderColors(tied.join("")).join("/"));
+      for (const c of tied) left.set(c, top - 0.5);
+    } else break; // three-way ties have no hybrid symbol; that mana stays generic
+  }
+  // Keep the usual colour order, with a hybrid pip sitting between its two colours.
+  // Usual colour order; a hybrid or Phyrexian symbol sits just after its first colour.
+  const pos = s => { const ps = s.split("/").filter(c => c !== "P").map(c => colours.indexOf(c)); return Math.min(...ps) + (ps.length > 1 || s.includes("/P") ? 0.5 : 0); };
+  pips.sort((a, b) => pos(a) - pos(b));
+  mv = Math.max(mv, pips.length);
+  let generic = mv - pips.length;
+  // Phyrexian (Compleated). Auto brings Phyrexian symbols over from the source cards, averaged
+  // like the coloured ones (one per ability); Yes makes sure there's at least one; No removes them.
+  // One colour gives {U/P}; two or more give the hybrid of the two most-used colours, like
+  // Ajani, Sleeper Agent's {G/W/P}. Each replaces a doubled coloured symbol if there is one
+  // ({2}{U}{U} becomes {2}{U}{U/P}, like Jace, the Perfected Mind), otherwise a generic mana,
+  // so the mana value doesn't change.
+  const srcPhy = Math.round(ws.reduce((t, w) => t + phyCount(w.c), 0) / n);
+  const wantPhy = state.phyrexian === "no" ? 0 : state.phyrexian === "yes" ? Math.max(1, srcPhy) : srcPhy;
+  const real = colours.filter(c => COLOUR_NAME[c]);
+  let phyrexian = null, phyN = 0;
+  if (wantPhy && real.length) {
+    const top = [...real].sort((a, b) => (weight.get(b) || 0) - (weight.get(a) || 0)).slice(0, 2);
+    phyrexian = (top.length > 1 ? orderColors(top.join("")).join("/") : top[0]) + "/P";
+    // Every colour keeps at least one regular symbol of its own, so the planeswalker can never
+    // be cast without each of its colours (a {G/U/P} always comes with a {G} and a {U}).
+    // So the Phyrexian symbol takes, in order: a regular hybrid of the same colours ({G/U} →
+    // {G/U/P}, which is how a source's {G/U/P} comes through), a second copy of a colour symbol,
+    // a generic mana, and failing all those, one extra mana.
+    const plain = phyrexian.slice(0, -2);
+    for (; phyN < wantPhy; phyN++) {
+      let i = plain.includes("/") ? pips.indexOf(plain) : -1;
+      if (i < 0) i = pips.findIndex((x, j) => /^[WUBRG]$/.test(x) && pips.indexOf(x) !== j);
+      if (i >= 0) pips[i] = phyrexian;
+      else if (generic > 0) { generic--; pips.push(phyrexian); }
+      else { mv++; pips.push(phyrexian); }
+    }
+    pips.sort((a, b) => pos(a) - pos(b));
+  }
+  const cost = (generic || !pips.length ? `{${generic}}` : "") + pips.map(s => `{${s}}`).join("");
+  // Baseline loyalty: the sources' average, nudged half a point per mana the new walker
+  // costs more (or less) than they did. Used to break ties between equally good loyalties.
+  const ls = ws.filter(w => loyNum(w.l) !== null);
+  let baseline = null;
+  if (ls.length) {
+    // Compleated sources start 1 higher per Phyrexian symbol; take that back off first.
+    const mL = ls.reduce((t, w) => t + +w.l - phyCount(w.c), 0) / ls.length;
+    const mM = ls.reduce((t, w) => t + w.mv, 0) / ls.length;
+    baseline = Math.max(1, Math.round(mL + 0.5 * (mv - mM)));
+  }
+  const pace = loyaltyPace(picks, baseline);
+  // Compleated planeswalkers lose 2 loyalty when life is paid, and printed ones make up
+  // for it by starting higher: about +1.4 per Phyrexian symbol on average. Add 1 per symbol.
+  const loyalty = phyN && pace.loyalty !== null ? pace.loyalty + phyN : pace.loyalty;
+  return { mv, cost, loyalty, phyrexian, phyN, wantPhy, baseline, pace, mean, max, n };
+}
+
+// Targets measured from printed planeswalkers (paper, non-flip, with a + and a − ability):
+// an ultimate (a − bigger than the card's starting loyalty) is usually reached after 2–4 turns
+// of using the + ability (3 most often: 187 of 214), and every other − leaves 1–3 loyalty
+// after it's used (2 most often: 205 of 218).
+// Printed planeswalkers start between 2 and 7 (leaving aside a couple of odd ones at 0).
+const ULT_TURNS = [2, 4], ULT_BEST = 3, LEFT = [1, 3], LEFT_BEST = 2, MIN_LOYALTY = 2, MAX_LOYALTY = 7, BIG = 6;
+function loyaltyPace(picks, baseline) {
+  const abs = picks.map(k => BY_KEY.get(k)).filter(a => !a.cost.includes("X"));
+  const plus = Math.max(0, ...abs.map(a => costNum(a.cost)).filter(v => v > 0));
+  // An ultimate is a − ability its original card couldn't use the turn it came down: one that
+  // costs more than that card's starting loyalty, whatever the number. (For the few cards with
+  // no fixed loyalty, −6 or more counts.) Ultimates are built up to with the + ability; without
+  // one they're out of reach. Every other − should be usable the turn the new one comes down.
+  const isUlt = a => { const L = loyNum(WALKERS[a.w].l), m = -costNum(a.cost); return L === null ? m >= BIG : m > L; };
+  const minusAbs = abs.filter(a => costNum(a.cost) < 0);
+  const big = minusAbs.filter(isUlt).map(a => -costNum(a.cost)).sort((x, y) => x - y);
+  const others = minusAbs.filter(a => !isUlt(a)).map(a => -costNum(a.cost)).sort((x, y) => x - y);
+  const ults = plus ? big : [], unreachable = plus ? [] : big;
+  const cap = L => L === null ? null : Math.max(MIN_LOYALTY, Math.min(MAX_LOYALTY, L));
+  if (!ults.length && !others.length) return { loyalty: cap(baseline), plus, ults, others, unreachable, missed: false };
+  const outside = (v, [lo, hi]) => v < lo ? lo - v : v > hi ? v - hi : 0;
+  const turnsTo = (m, L) => Math.ceil(Math.max(0, m - L) / plus);
+  let best = null;
+  for (let L = MIN_LOYALTY; L <= MAX_LOYALTY; L++) {
+    let miss = 0, near = 0;
+    for (const u of ults) { const t = turnsTo(u, L); miss += outside(t, ULT_TURNS); near += Math.abs(t - ULT_BEST); }
+    for (const m of others) { const left = L - m; miss += outside(left, LEFT); near += Math.abs(left - LEFT_BEST); }
+    // Hitting the targets matters most; then being close to their most common values;
+    // then staying close to what the source cards' cost and loyalty suggest.
+    const score = miss * 100 + near * 3 + (baseline === null ? 0 : Math.abs(L - baseline));
+    if (!best || score < best.score) best = { score, L, miss };
+  }
+  return { loyalty: best.L, plus, ults, others, unreachable, missed: best.miss > 0 };
+}
+
+const COLOUR_NAME = { W: "white", U: "blue", B: "black", R: "red", G: "green" };
+
+// The user's own mana cost: "{2}{R}{R}", or shorthand like "2RR", "1 G U/B/P W".
+function parseCost(text) {
+  const t = text.trim().toUpperCase();
+  if (!t) return null;
+  const raw = t.includes("{") ? [...t.matchAll(/\{([^}]*)\}/g)].map(m => m[1].trim())
+                              : t.match(/\d+|[A-Z0-9](?:\/[A-Z0-9])*/g) || [];
+  let generic = 0, x = 0;
+  const pips = [];
+  for (const r of raw) {
+    if (/^\d+$/.test(r)) { generic += +r; continue; }
+    if (r === "X") { x++; continue; }
+    const parts = r.split("/");
+    const cols = parts.filter(p => /^[WUBRG]$/.test(p)), phy = parts.includes("P"), two = parts[0] === "2";
+    const ok = r === "C" || (cols.length === 1 && parts.length === 1)
+      || (cols.length >= 1 && cols.length <= 2 && parts.length === cols.length + (phy ? 1 : 0) + (two ? 1 : 0) && !(two && (phy || cols.length > 1)));
+    if (!ok) return { error: `"{${r}}" isn't a mana symbol. Try something like {2}{R}{R}, 2RR or 1 U/B/P B.` };
+    if (r === "C") { pips.push("C"); continue; }
+    pips.push([...(two ? ["2"] : []), ...orderColors(cols.join("")), ...(phy ? ["P"] : [])].join("/"));
+  }
+  if (!raw.length) return { error: "Couldn't read that mana cost." };
+  const cost = "{X}".repeat(x) + (generic || !pips.length && !x ? `{${generic}}` : "") + pips.map(p => `{${p}}`).join("");
+  const mv = generic + pips.reduce((t, p) => t + (p.startsWith("2/") ? 2 : 1), 0);
+  return { cost, mv, colours: [...new Set(pips.flatMap(p => p.split("/")).filter(c => COLOUR_NAME[c]))] };
+}
+const overrideCost = () => { const p = parseCost(state.oCost); return p && !p.error ? p : null; };
+const overrideLoyalty = () => /^\d+$/.test(String(state.oLoy).trim()) ? Math.min(20, +state.oLoy) : null;
+// The numbers the card actually uses: the user's where given, otherwise the recommendation.
+function effective(rec) {
+  const oc = overrideCost(), ol = overrideLoyalty();
+  const e = { ...rec, suggested: rec, costOver: !!oc, loyOver: ol !== null };
+  if (oc) {
+    e.cost = oc.cost; e.mv = oc.mv;
+    const phy = oc.cost.match(/\{([^}]*\/P)\}/g) || [];
+    e.phyN = phy.length; e.phyrexian = phy.length ? phy[0].slice(1, -1) : null;
+  }
+  if (ol !== null) e.loyalty = ol;
+  // Typing a cost without Phyrexian mana shouldn't keep the recommendation's +1 for it.
+  else if (oc && rec.phyN !== e.phyN && rec.loyalty !== null) e.loyalty = rec.loyalty - rec.phyN + e.phyN;
+  return e;
+}
+// The colours the card is: from the user's own cost if they typed one, else from the picker.
+function cardColours() {
+  const oc = overrideCost();
+  if (oc) return oc.colours.length ? oc.colours : ["C"];
+  return state.colours;
+}
+// Colours an ability's source planeswalker has that the user hasn't picked.
+function offColours(a) {
+  const chosen = cardColours();
+  if (!chosen.length) return [];
+  const have = chosen[0] === "C" ? [] : chosen;
+  return WALKERS[a.w].col.split("").filter(c => COLOUR_NAME[c] && !have.includes(c));
+}
+function notes(picks, rec) {
+  const out = [];
+  if (cardColours().length) {
+    const off = picks.map(k => BY_KEY.get(k)).filter(a => offColours(a).length);
+    if (off.length) out.push(["warn", "Not in your colours: " + off.map(a => `${WALKERS[a.w].n}'s ${a.cost} (${offColours(a).map(c => COLOUR_NAME[c]).join("/")})`).join(", ")
+      + ". Usually a planeswalker's abilities match its colours."]);
+    const used = new Set(picks.flatMap(k => WALKERS[BY_KEY.get(k).w].col.split("")));
+    const unused = cardColours().filter(c => COLOUR_NAME[c] && !used.has(c));
+    if (unused.length) out.push(["", `None of these abilities come from a ${unused.map(c => COLOUR_NAME[c]).join(" or ")} planeswalker.`]);
+  }
+  const costs = picks.map(k => BY_KEY.get(k).cost);
+  const { plus, ults, others, unreachable, missed } = rec.pace;
+  const L = rec.loyalty;
+  if (L !== null) {
+    if (!plus) out.push(["warn", "No + ability, so loyalty never goes up. Each minus use brings it closer to dying."]);
+    for (const m of [...new Set(others)]) {
+      const left = L - m;
+      if (left > 0) out.push(["", `−${m}: usable the turn it comes down, leaving ${left} loyalty.`]);
+      else if (left === 0) out.push(["warn", `−${m}: usable right away, but it uses up all its loyalty and the planeswalker dies.`]);
+      else if (plus) out.push(["warn", `−${m}: needs ${Math.ceil(-left / plus)} turn(s) of +${plus} before it can be used.`]);
+      else out.push(["warn", `−${m}: costs more than its starting loyalty, and there's no + ability to build up to it.`]);
+    }
+    for (const u of [...new Set(ults)]) {
+      const t = Math.ceil(Math.max(0, u - L) / plus);
+      out.push([t < 2 || t > 4 ? "warn" : "", t === 0 ? `−${u} (ultimate): usable the turn it comes down.`
+        : `−${u} (ultimate): ${t} turn(s) of +${plus}, then use it the turn after.`]);
+    }
+    if (rec.wantPhy && !rec.phyrexian && !rec.costOver) out.push(["warn", "Phyrexian mana needs a colour, so a colourless planeswalker can't be compleated."]);
+    for (const u of [...new Set(unreachable)]) out.push(["warn", u > L
+      ? `−${u}: costs more than its starting loyalty, and there's no + ability to build up to it.`
+      : `−${u}: usable right away${u === L ? ", but it uses up all its loyalty and the planeswalker dies" : ""}.`]);
+    if (missed && !rec.loyOver) out.push(["warn", "These abilities can't all hit the usual pace at once, so this is the closest fit."]);
+    if (rec.loyOver && (L < 2 || L > 7)) out.push(["warn", `Printed planeswalkers start between 2 and 7 loyalty; yours starts at ${L}.`]);
+    if (rec.phyrexian) {
+      const lifeL = L - 2 * rec.phyN, cant = others.filter(m => m >= lifeL);
+      out.push([lifeL < 1 ? "warn" : "", `Paying life for ${rec.phyN > 1 ? "every " : ""}{${rec.phyrexian}} drops it to ${lifeL} loyalty`
+        + (lifeL < 1 ? ", so it dies as it enters." : cant.length ? `, so −${Math.min(...cant)} would ${Math.min(...cant) === lifeL ? "kill it" : "be out of reach"} that turn.` : ".")]);
+    }
+  }
+  if (costs.some(c => c.includes("X"))) out.push(["", "X abilities were counted as costing 0 when working this out."]);
+  if (picks.length > 4) out.push(["warn", `${picks.length} abilities is a lot. Printed planeswalkers have at most four.`]);
+  const ws = new Set(picks.map(k => WALKERS[BY_KEY.get(k).w]));
+  if ([...ws].some(w => w.flag)) out.push(["", "Uses an Un-set, playtest or digital-only ability."]);
+  return out;
+}
+
+// ---------- Builder ----------
+function customText(a) {
+  const w = WALKERS[a.w];
+  const name = state.name.trim();
+  if (!name) return a.x;
+  const reS = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let t = a.x.split(w.n).join(name);
+  // Shorter ways the card refers to itself: the part before the comma ("Chandra" for
+  // "Chandra, Torch of Defiance"), and its planeswalker type when that's in its name
+  // ("Karn" for "Karn Liberated"). Longest first, so "Nicol Bolas" goes before "Bolas".
+  const forms = new Set();
+  if (w.n.includes(",")) forms.add(w.n.split(",")[0].trim());
+  for (const sub of w.t.split(" ")) if (sub && new RegExp(`\\b${reS(sub)}\\b`).test(w.n)) forms.add(sub);
+  forms.delete(w.n);
+  const mine = state.type && new RegExp(`\\b${reS(state.type)}\\b`).test(name) ? state.type : short(name);
+  // Leave "a Chandra planeswalker" and real card names ("named Ajani's Pridemate") alone.
+  for (const f of [...forms].sort((x, y) => y.length - x.length))
+    t = t.replace(new RegExp(`(?<!named )\\b${reS(f)}\\b(?! planeswalker)`, "g"), mine);
+  return t;
+}
+function compleatedText(sym, count) {
+  const cols = sym.split("/").filter(c => c !== "P");
+  const pay = cols.map(c => `{${c}}`).join(cols.length > 1 ? ", " : "");
+  return `Compleated ({${sym}} can be paid with ${pay}${cols.length > 1 ? "," : ""} or 2 life. `
+    + (count > 1 ? `For each {${sym}} paid with life, this planeswalker enters with two fewer loyalty counters.)`
+                 : `If life was paid, this planeswalker enters with two fewer loyalty counters.)`);
+}
+function cardText() {
+  const rec = state.picks.length ? effective(recommend(state.picks)) : null;
+  const lines = [`${state.name || "Unnamed planeswalker"} ${rec ? rec.cost : ""}`.trim(),
+    `Legendary Planeswalker${state.type ? " — " + state.type : ""}`];
+  if (rec && rec.phyrexian) lines.push(compleatedText(rec.phyrexian, rec.phyN));
+  for (const k of sortedPicks()) { const a = BY_KEY.get(k); lines.push(`${a.cost}: ${customText(a)}`); }
+  if (rec && rec.loyalty !== null) lines.push(`Loyalty: ${rec.loyalty}`);
+  return lines.join("\n");
+}
+// Printed order: + abilities first, then 0, then − abilities from smallest to biggest.
+const sortedPicks = () => [...state.picks].sort((x, y) => costNum(BY_KEY.get(y).cost) - costNum(BY_KEY.get(x).cost));
+
+function renderBuilder() {
+  $("cName").textContent = state.name || "Your planeswalker";
+  $("cType").textContent = "Legendary Planeswalker" + (state.type ? " — " + state.type : "");
+  const picks = sortedPicks();
+  $("cAbs").innerHTML = picks.length ? picks.map(k => {
+    const a = BY_KEY.get(k), w = WALKERS[a.w];
+    return `<div class="cab" data-k="${k}">${costBadge(a.cost)}<div class="t">${symbols(customText(a))}</div>
+      <button class="x" title="Remove">×</button>
+      <div class="from">from <a href="${esc(w.u)}" target="_blank" rel="noopener" data-img="${esc(w.i)}">${esc(w.n)}</a>
+      · ${w.c ? symbols(w.c) : "no cost"} · loyalty ${esc(w.l || "?")}${offColours(a).length
+        ? ` · <span class="mismatch">⚠ ${offColours(a).map(c => COLOUR_NAME[c]).join("/")}, not in your colours</span>` : ""}</div></div>`;
+  }).join("") : `<div class="empty">Add abilities from the list to start building.</div>`;
+  $("cComp").style.display = "none";
+  if (!picks.length) {
+    $("cCost").innerHTML = ""; $("cLoy").textContent = "–";
+    $("rec").innerHTML = `<h3>Recommendation</h3><div style="color:var(--muted);font-size:14px">A suggested mana cost and starting loyalty will appear here once you add abilities.</div>`;
+    return;
+  }
+  const sug = recommend(picks), rec = effective(sug);
+  $("oCost").placeholder = sug.cost; $("oLoy").placeholder = sug.loyalty ?? "";
+  $("cCost").innerHTML = symbols(rec.cost);
+  if (rec.phyrexian) { $("cComp").style.display = "block"; $("cComp").innerHTML = `<div style="grid-column:1/-1">${symbols(compleatedText(rec.phyrexian, rec.phyN))}</div>`; }
+  $("cLoy").textContent = rec.loyalty ?? "?";
+  $("rec").innerHTML = `<h3>Recommendation</h3>
+    <div class="big"><span>Mana cost <b>${symbols(rec.cost)}</b> <span style="color:var(--muted)">(MV ${rec.mv}${rec.costOver
+        ? `; yours, suggested ${symbols(sug.cost)}` : ""})</span></span>
+      <span>Starting loyalty <b>${rec.loyalty ?? "?"}</b>${rec.loyOver ? ` <span style="color:var(--muted)">(yours, suggested ${sug.loyalty ?? "?"})</span>` : ""}${rec.phyN && rec.loyalty !== null
+        ? ` <span style="color:var(--muted)">(${rec.phyN > 1 ? Array.from({ length: rec.phyN }, (_, i) => rec.loyalty - 2 * (i + 1)).join(" / ")
+          + " if life is paid for " + Array.from({ length: rec.phyN }, (_, i) => i + 1).join(" / ") : (rec.loyalty - 2) + " if life is paid"})</span>` : ""}</span></div>
+    <ul>${notes(picks, rec).map(([c, t]) => `<li class="${c}">${esc(t)}</li>`).join("")}</ul>
+    <details><summary>How this is worked out</summary>
+      <p>Type your own <b>mana cost</b> or <b>loyalty</b> in the boxes above to use them instead. The notes then check your numbers,
+      and the suggestion stays visible beside them. Costs can be written as ${esc("{2}{R}{R}")} or shorthand like 2RR or 1 U/B/P B.</p>
+      <p><b>Mana value</b> is halfway between the average (${rec.mean.toFixed(1)}) and the highest (${rec.max}) mana value of the
+      planeswalkers the abilities come from, so one strong ability from an expensive walker pulls the cost up. It goes up half a mana for
+      each ability past three, and down half a mana for each one short of three.</p>
+      <p><b>Coloured mana</b> is worked out in two parts. <i>How many</i> coloured symbols: the average number on the source
+      planeswalkers, counting each ability once. <i>Which colours</i>: every colour any of them needs, with at least one symbol each.
+      Extra symbols go to the colour your abilities lean on most, and a tie between two colours makes a hybrid symbol.
+      So ${symbols("{2}{U}{U}")} and ${symbols("{2}{R}{R}")} give ${symbols("{2}{U}{R}")}. Any leftover mana value is generic.
+      <b>Phyrexian mana</b>: on Auto, the source planeswalkers' Phyrexian symbols carry over, averaged the same way as coloured ones.
+      Yes makes sure there's at least one; No removes them. They follow the printed compleated planeswalkers: one-colour ones get
+      ${symbols("{U/P}")}, and two-colour ones get the hybrid version between their colours, like ${symbols("{1}{G}{G/W/P}{W}")}. Every colour always keeps
+      at least one regular symbol, so it can never be cast without each of its colours. The Phyrexian symbol replaces a matching
+      regular hybrid symbol, a doubled colour symbol or a generic mana, in that order, so the mana value stays the same; only if
+      there's none of those does it add 1 to the mana value. Because paying life for each one costs two loyalty, it starts with
+      1 more loyalty per Phyrexian symbol, in line with printed compleated planeswalkers, which start about 1.4 higher per Phyrexian symbol.
+      If you pick colours yourself, those are used instead, with the same number of coloured symbols; picking colourless makes it all generic.</p>
+      <p><b>Starting loyalty</b> is set so the − abilities come at the same pace as on printed planeswalkers. On real cards,
+      the ultimate is usually reached after 2 to 4 turns of using the + ability (3 most often), and every other − ability can be used
+      the turn the planeswalker comes down, leaving 1 to 3 loyalty (2 most often). A − counts as an ultimate if the card it came from
+      couldn't use it the turn it came down, because it cost more than that card's starting loyalty, however big or small the number is. Starting loyalty stays
+      between 2 and 7, the range printed planeswalkers use.</p>
+      <p>When several loyalties fit equally well, it picks the one closest to the source planeswalkers' average loyalty, adjusted
+      half a point for each mana the new one costs more (or less) than they did${rec.baseline !== null ? ` (${rec.baseline} here)` : ""}.
+      With no − abilities, that adjusted average is used on its own.</p>
+      <p>It's a rough guide, not a balance check. Two abilities that were fine apart can be broken together.</p>
+    </details>`;
+}
+
+function update() { writeHash(); renderBuilder(); renderList(); }
+
+$("name").addEventListener("input", e => {
+  state.name = e.target.value;
+  // The type follows the name (the part before the comma) until it's edited by hand.
+  if (!state.typeEdited) { state.type = short(state.name.trim()); $("type").value = state.type; }
+  writeHash(); renderBuilder();
+});
+$("type").addEventListener("input", e => { state.type = e.target.value.trim(); state.typeEdited = !!state.type; writeHash(); renderBuilder(); });
+$("cAbs").addEventListener("click", e => {
+  const b = e.target.closest(".x"); if (!b) return;
+  state.picks = state.picks.filter(k => k !== b.closest(".cab").dataset.k);
+  update();
+});
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 1400); }
+async function copy(text, msg) {
+  try { await navigator.clipboard.writeText(text); toast(msg); }
+  catch (e) { prompt("Copy this:", text); }
+}
+$("pick").innerHTML = ["W", "U", "B", "R", "G", "C"].map(c =>
+  `<button class="chip" data-c="${c}" title="${{ W: "White", U: "Blue", B: "Black", R: "Red", G: "Green", C: "Colourless" }[c]}">${symbols("{" + c + "}")}</button>`).join("")
+  + `<button class="chip" data-c="" title="Work the colours out from the abilities">Auto</button>`;
+function renderPicker() {
+  for (const b of $("pick").querySelectorAll(".chip"))
+    b.classList.toggle("on", b.dataset.c ? state.colours.includes(b.dataset.c) : !state.colours.length);
+  $("colMode").textContent = state.colours.length ? "(your choice)" : "(automatic)";
+}
+$("pick").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  const c = b.dataset.c;
+  // Colourless can't be combined with colours; Auto clears the choice.
+  if (!c) state.colours = [];
+  else if (c === "C") state.colours = state.colours[0] === "C" ? [] : ["C"];
+  else state.colours = state.colours.includes(c) ? state.colours.filter(x => x !== c) : [...state.colours.filter(x => x !== "C"), c];
+  renderPicker(); writeHash(); renderBuilder();
+});
+function renderPhy() { for (const b of $("phy").querySelectorAll(".chip")) b.classList.toggle("on", b.dataset.p === state.phyrexian); }
+$("phy").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  state.phyrexian = b.dataset.p; renderPhy(); writeHash(); renderBuilder();
+});
+function showCostError() {
+  const p = parseCost(state.oCost);
+  $("oErr").style.display = p && p.error ? "block" : "none";
+  $("oErr").textContent = p && p.error ? p.error : "";
+}
+$("oCost").addEventListener("input", e => { state.oCost = e.target.value; showCostError(); writeHash(); renderBuilder(); });
+$("oLoy").addEventListener("input", e => { state.oLoy = e.target.value; writeHash(); renderBuilder(); });
+$("copy").addEventListener("click", () => copy(cardText(), "Card text copied"));
+$("share").addEventListener("click", () => copy(location.href, "Link copied. Anyone who opens it sees this planeswalker."));
+$("clear").addEventListener("click", () => {
+  if (state.picks.length && !confirm("Clear this planeswalker?")) return;
+  Object.assign(state, { name: "", type: "", typeEdited: false, picks: [], colours: [], phyrexian: "auto", oCost: "", oLoy: "" });
+  $("oCost").value = ""; $("oLoy").value = ""; showCostError();
+  renderPhy();
+  renderPicker();
+  $("name").value = ""; $("type").value = "";
+  update();
+});
+
+// Card image preview when hovering a planeswalker's name.
+const peek = $("peek");
+document.addEventListener("mouseover", e => {
+  const a = e.target.closest("a[data-img]");
+  if (!a || !a.dataset.img || matchMedia("(hover: none)").matches) return;
+  peek.src = a.dataset.img; peek.style.display = "block";
+  const r = a.getBoundingClientRect();
+  const left = r.right + 260 < innerWidth ? r.right + 12 : Math.max(8, r.left - 256);
+  peek.style.left = left + "px";
+  peek.style.top = Math.max(8, Math.min(innerHeight - 350, r.top - 120)) + "px";
+});
+document.addEventListener("mouseout", e => { if (e.target.closest("a[data-img]")) peek.style.display = "none"; });
+
+$("types").innerHTML = [...new Set(WALKERS.map(w => w.t).filter(Boolean))].sort().map(t => `<option value="${esc(t)}">`).join("");
+readHash();
+renderPicker();
+$("oCost").value = state.oCost; $("oLoy").value = state.oLoy; showCostError();
+renderPhy();
+$("name").value = state.name; $("type").value = state.type;
+if (!state.typeEdited && state.name) state.type = short(state.name.trim()), $("type").value = state.type;
+update();
+</script>
+</body>
+</html>

@@ -3,11 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Powercreep</title>
+<title>powercreep</title>
+<link rel="icon" type="image/x-icon" href="../favicon.ico">
 <style>
   :root {
-    --bg: #14161a; --panel: #1c1f25; --panel-2: #242830; --line: #2f343e;
-    --text: #e8e6e1; --muted: #9a9ca3; --accent: #e0a13a;
+    /* Colours from cyanlastride.ca's style.css: black, white, teal #008282, red #e00707, cyan hover.
+       --close keeps the orange that marks close calls. */
+    --bg: #000; --panel: #000; --panel-2: #0b1d1d; --line: #333;
+    --text: #fff; --muted: #a0a0a0; --accent: #008282; --close: #e0a13a; --red: #e00707; --hover: cyan;
     --up: #6fbf8b; --down: #d9796a; --same: #7fa8d9; --side: #b4a6f0; --chip: #2a2f38;
     color-scheme: dark;
   }
@@ -75,9 +78,9 @@
   .sechead .n { color: var(--muted); }
   .sechead p { margin: 0; color: var(--muted); font-size: 13px; flex-basis: 100%; }
   .sechead { flex-wrap: wrap; }
-  .up h2 { color: var(--up); } .down h2 { color: var(--down); } .same h2 { color: var(--same); } .close h2 { color: var(--accent); } .side h2 { color: var(--side); }
+  .up h2 { color: var(--up); } .down h2 { color: var(--down); } .same h2 { color: var(--same); } .close h2 { color: var(--close); } .side h2 { color: var(--side); }
   .chip.mine { background: transparent; border: 1px solid var(--chip); }
-  .chip.give { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+  .chip.give { background: transparent; border: 1px solid var(--close); color: var(--close); }
 
   .row { display: grid; grid-template-columns: 220px 1fr; gap: 18px; padding: 10px; border-radius: 10px; }
   .row:hover { background: var(--panel); }
@@ -169,7 +172,7 @@
   .pick.on { background: var(--panel-2); box-shadow: inset 3px 0 0 var(--accent); }
   .pick .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pick .b { font-size: 12px; font-weight: 700; min-width: 20px; text-align: center; border-radius: 5px; padding: 0 4px; background: var(--chip); }
-  .b.up { color: var(--up); } .b.close { color: var(--accent); } .b.down { color: var(--down); }
+  .b.up { color: var(--up); } .b.close { color: var(--close); } .b.down { color: var(--down); }
   .deckcard { display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: start; margin-bottom: 24px; }
   .deckcard > a > img, .deckcard .ph { width: 200px; height: auto; border-radius: 4.75% / 3.5%; display: block; }
   .deckcard h1 a:hover { color: var(--accent); }
@@ -186,23 +189,53 @@
     .row { grid-template-columns: 1fr; }
     .cols { grid-template-columns: 1fr; }
   }
+
+  /* ---- cyanlastride.ca look: monospace, square corners, teal edges, red links ---- */
+  body { font: 16px/1.45 monospace; }
+  .site { max-width: 1180px; margin: 0 auto; padding: 24px 20px 0; }
+  body.wide .site { max-width: none; padding-left: 32px; padding-right: 32px; }
+  .sitetitle { font-size: 36px; color: #008282; margin: 0 0 8px; }
+  .sitetitle a, .sitetitle a:hover { color: #008282; }
+  .topTitle { display: flex; height: 54px; align-items: center; }
+  header { background: rgba(0,0,0,.94); backdrop-filter: none; border-bottom: 3px solid var(--accent); }
+  .logo { font-size: 28px; color: var(--accent); letter-spacing: 0; }
+  .navlink { color: var(--red); }
+  .navlink:hover, .hero .meta a:hover { color: var(--hover); }
+  .hero .meta a { color: var(--red); }
+  .deckcard h1 a:hover { color: var(--hover); }
+  input, select, textarea, .search input, .options select, .deckform textarea { background: #000; border: 1px solid var(--accent) !important; border-radius: 0 !important; }
+  input:focus, select:focus, textarea:focus { border-color: var(--hover) !important; }
+  .btn, .chip, .seg, .tally button, .options, .results, .tile, .chart, .deckform, .empty, .tip, .row, .rank, .pick, .pick .b, .tag, .swatch { border-radius: 0 !important; }
+  .btn, .chip, .tally button { background: #000; border: 1px solid var(--accent); }
+  .btn:hover, .chip:hover, .tally button:hover:not(:disabled) { border-color: var(--hover); color: var(--hover); }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); box-shadow: none; color: #fff; }
+  .options, .tile, .chart, .deckform { border: 3px solid var(--accent); }
+  .chart svg:focus-visible { box-shadow: 0 0 0 2px var(--hover); }
+  .pick.on { box-shadow: inset 3px 0 0 var(--accent); }
+  .sitefoot { max-width: 1180px; margin: 0 auto; padding: 0 20px 40px; }
+  .sitefoot a { color: var(--red); } .sitefoot a:hover { color: var(--hover); }
+  @media (max-width: 760px) { .sitetitle { font-size: 28px; } }
 </style>
 </head>
 <body>
+<div class="site">
+  <h1 class="sitetitle"><a href="../index.html" class="topTitle"><img src="../LaStrideSymbol.png" alt="" style="height:54px;">cyanLaStride</a></h1>
+</div>
 <header>
   <div class="bar">
-    <a class="logo" href="#/">Power<span>creep</span></a>
+    <a class="logo" href="#/">powercreep</a>
     <div class="search">
       <input id="q" type="search" placeholder="Search for a card…" autocomplete="off" spellcheck="false">
       <div id="results" class="results" hidden></div>
     </div>
-    <a class="navlink" href="#/deck">Deck check</a>
-    <a class="navlink" href="#/unbeaten">Unbeaten</a>
-    <a class="navlink" href="#/charts">Charts</a>
-    <button class="btn" id="random">Random card</button>
+    <a class="navlink" href="#/deck">deck check</a>
+    <a class="navlink" href="#/unbeaten">unbeaten</a>
+    <a class="navlink" href="#/charts">charts</a>
+    <button class="btn" id="random">random card</button>
   </div>
 </header>
 <main id="app"><p class="muted">Loading card data…</p></main>
+<footer class="sitefoot"><a href="../index.html">Back</a></footer>
 
 <script src="data.js"></script>
 <script>
@@ -346,7 +379,7 @@ function cardView(i) {
     section("same", "same", "Functionally identical", "Same cost, same stats, same rules text. Only the name, and sometimes the creature type, differs.", same, 0),
   ].join("") : `<div class="empty">No strictly better or worse cards found for ${esc(c[NAME])} with these settings.<br>
       That usually means it does something unique enough that nothing lines up exactly.</div>`;
-  document.title = c[NAME] + " · Powercreep";
+  document.title = c[NAME] + " · powercreep";
   app.innerHTML = `<div class="cardview">
     <aside class="hero">
       ${image(c, "normal")}
@@ -355,8 +388,8 @@ function cardView(i) {
         <button data-jump="creptBy outclassed" ${ups.length ? "" : "disabled"}><b style="color:var(--up)">${ups.length}</b><small>better cards</small></button>
         <button data-jump="creeps weaker" ${downs.length ? "" : "disabled"}><b style="color:var(--down)">${downs.length}</b><small>worse cards</small></button>
         <button data-jump="same" ${same.length ? "" : "disabled"}><b style="color:var(--same)">${same.length}</b><small>identical</small></button>
-        <button data-jump="nearUps" ${nearUps.length ? "" : "disabled"}><b style="color:var(--accent)">${nearUps.length}</b><small>nearly better</small></button>
-        <button data-jump="nearDowns" ${nearDowns.length ? "" : "disabled"}><b style="color:var(--accent)">${nearDowns.length}</b><small>nearly worse</small></button>
+        <button data-jump="nearUps" ${nearUps.length ? "" : "disabled"}><b style="color:var(--close)">${nearUps.length}</b><small>nearly better</small></button>
+        <button data-jump="nearDowns" ${nearDowns.length ? "" : "disabled"}><b style="color:var(--close)">${nearDowns.length}</b><small>nearly worse</small></button>
         <button data-jump="sides" ${side.length ? "" : "disabled"}><b style="color:var(--side)">${side.length}</b><small>sidegrades</small></button>
       </div>
       <div class="meta">First printed ${c[DATE]} in ${esc(SETS[c[SET]])}.<br>
@@ -372,7 +405,7 @@ function cardView(i) {
 }
 
 function homeView() {
-  document.title = "Powercreep";
+  document.title = "powercreep";
   const count = arr => arr.map((list, i) => [i, list.filter(allowed).length]).sort((a, b) => b[1] - a[1]).slice(0, 15);
   const rank = (rowsData, word) => rowsData.map(([i, n], k) =>
     `<a class="rank" href="${link(i)}"><span class="i">${k + 1}</span>
@@ -382,7 +415,7 @@ function homeView() {
     .filter(n => byName.has(n.toLowerCase()));
   const total = PAIRS.filter(p => allowed(p) && !(p[2] & 24)).length;
   app.innerHTML = `
-    <h1>Which cards have been left behind?</h1>
+    <h1>which cards have been left behind?</h1>
     <p class="lead">Pick any Magic card to see the cards that do the same job better, and the ones it made obsolete.
       A card counts as better when it does everything the other does for mana the other's cost could always pay,
       and comes out ahead somewhere: cheaper, bigger, faster, or with extra upside.
@@ -440,9 +473,9 @@ function deckForm(open) {
 }
 
 function deckView() {
-  document.title = "Deck check · Powercreep";
+  document.title = "deck check · powercreep";
   if (!deck.list.length) {
-    app.innerHTML = `<h1>Deck check</h1>
+    app.innerHTML = `<h1>deck check</h1>
       <p class="lead">Paste a Commander decklist to step through it card by card and see what could replace each card:
         strict upgrades, close calls and downgrades. Suggestions are limited to Commander-legal cards inside
         your deck's colour identity that aren't already in the list.</p>
@@ -499,10 +532,10 @@ function deckView() {
   }
   // Redrawing replaces the card list, so remember how far it was scrolled.
   const oldList = app.querySelector(".decklist"), listY = oldList ? oldList.scrollTop : 0;
-  app.innerHTML = `<h1>Deck check</h1>
+  app.innerHTML = `<h1>deck check</h1>
     <p class="muted" style="margin:0 0 14px">${total} cards recognised${total > deck.list.length ? ` (${deck.list.length} different)` : ""} · colour identity ${symbols(identity)} ·
       <b style="color:var(--up)">${info.filter(d => d.ups.length).length}</b> have a strict upgrade,
-      <b style="color:var(--accent)">${info.filter(d => !d.ups.length && d.nearUps.length).length}</b> more have only a close call.
+      <b style="color:var(--close)">${info.filter(d => !d.ups.length && d.nearUps.length).length}</b> more have only a close call.
       Suggestions are Commander-legal, inside that identity, and not already in the deck.</p>
     ${deck.unknown.length ? `<details class="deckform"><summary>${deck.unknown.length} ${deck.unknown.length === 1 ? "line" : "lines"} not recognised</summary>
       <p class="muted">Usually a typo, or a card that isn't legal in Vintage or Commander (Un-sets, digital-only cards).</p>
@@ -585,7 +618,7 @@ function unbeatenFilter(c) {
 }
 
 function unbeatenView() {
-  document.title = "Unbeaten · Powercreep";
+  document.title = "unbeaten · powercreep";
   const sort = UB_SORTS[opts.ubSort] || UB_SORTS.mv;
   const all = CARDS.map((c, i) => i).filter(i => !gone(i) && !better[i].some(allowed) && !twins[i].some(j => !gone(j)));
   const list = all.filter(i => unbeatenFilter(CARDS[i]))
@@ -621,7 +654,7 @@ function unbeatenView() {
         ${MV_CHIPS.map(v => `<button class="chip" data-ubmv="${v}" aria-pressed="${picked.includes(v)}">${v}</button>`).join("")}
         ${opts.ubMV ? `<button class="chip clear" data-ubclear="mv">Clear</button>` : ""}</span>
     </div>`;
-  app.innerHTML = `<h1>Unbeaten cards</h1>
+  app.innerHTML = `<h1>unbeaten cards</h1>
     <p class="muted" style="max-width:680px">Every card that has no strictly better card and no functionally identical twin,
       under the settings below. Close calls don't count as beating a card.
       Showing <b style="color:var(--text)">${list.length.toLocaleString()}</b> of ${all.length.toLocaleString()} unbeaten cards.</p>
@@ -895,7 +928,7 @@ function drawPool(host, rows) {
 }
 
 function chartsView() {
-  document.title = "Charts · Powercreep";
+  document.title = "charts · powercreep";
   const rows = yearStats(), all = { total: CARDS.filter((c, i) => !gone(i)).length }, pool = poolStats();
   for (const s of SERIES) all[s.key] = rows.reduce((t, r) => t + r[s.key], 0);
   const pct = k => (all[k] / all.total * 100).toFixed(1) + "%";
@@ -903,7 +936,7 @@ function chartsView() {
       <button data-mode="count" aria-pressed="${!share()}">Number of cards</button>
       <button data-mode="share" aria-pressed="${share()}">Share of that year's cards</button></span>`;
   app.innerHTML = `<div class="viz-root">
-    <h1>Powercreep by year</h1>
+    <h1>powercreep by year</h1>
     <p class="lead">Every card is counted once, in the year it was first printed, under each category it falls into.
       A card can be in more than one. ${rows[rows.length - 1].year} is a partial year.</p>
     ${optionsBar(seg, false)}
