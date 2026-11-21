@@ -123,6 +123,7 @@
   .mapedge.same { stroke: var(--same); stroke-dasharray: 2 4; stroke-linecap: round; }
   .mapdim .mapedge:not(.hot) { opacity: .12; }
   .mapdim .mapnode:not(.hot) { opacity: .3; }
+  .maplegend label { display: inline-flex; gap: 7px; align-items: center; cursor: pointer; }
   .maplegend i.close { background: var(--close); }
   .maplegend i.side { background: repeating-linear-gradient(90deg, var(--side) 0 6px, transparent 6px 10px); }
   .maplegend i.strict { background: var(--up); }
@@ -1049,10 +1050,12 @@ function mapLinks(i) {
 function mapView(centre) {
   document.title = (centre === undefined ? "map" : CARDS[centre][NAME] + " · map") + " · powercreep";
   const lead = `<label>Steps out <select data-mapopt="depth">${[1, 2, 3].map(d => `<option ${d === mapState.depth ? "selected" : ""}>${d}</option>`).join("")}</select></label>
-    <label><input type="checkbox" data-mapopt="close" ${mapState.close ? "checked" : ""}> Close calls</label>
-    <label><input type="checkbox" data-mapopt="side" ${mapState.side ? "checked" : ""}> Sidegrades</label>
-    <label><input type="checkbox" data-mapopt="strict" ${mapState.strict ? "checked" : ""}> Strictly better</label>
-    <label><input type="checkbox" data-mapopt="same" ${mapState.same ? "checked" : ""}> Identical</label>`;
+`;
+  // The legend doubles as the switches: each kind of link has its checkbox beside its line.
+  const legend = extra => `<div class="legend maplegend">${[
+      ["strict", "strictly better (arrow points at the better card)"], ["close", "close call (arrow points at the nearly better card)"],
+      ["side", "sidegrade"], ["same", "identical"]]
+    .map(([k, label]) => `<label><input type="checkbox" data-mapopt="${k}" ${mapState[k] ? "checked" : ""}><i class="${k}"></i>${label}</label>`).join("")}${extra}</div>`;
   const head = `<h1>map</h1>`;
   if (centre === undefined) { app.innerHTML = head + `<p class="muted">Search for a card to put it in the middle of the map.</p>`; return; }
 
@@ -1068,7 +1071,7 @@ function mapView(centre) {
     }
   }
   if (order.length === 1) {
-    app.innerHTML = head + `<p class="muted">${esc(CARDS[centre][NAME])} has no links with these settings.</p>` + optionsBar(lead, false);
+    app.innerHTML = head + `<p class="muted">${esc(CARDS[centre][NAME])} has no links with these settings.</p>` + optionsBar(lead, false) + legend("");
     return;
   }
   const full = order.length >= MAP_MAX;
@@ -1085,8 +1088,7 @@ function mapView(centre) {
   for (const e of edges) { e.s = at.get(e.a); e.t = at.get(e.b); e.s.deg++; e.t.deg++; }
 
   app.innerHTML = head + optionsBar(lead, false) + `
-    <div class="legend maplegend"><span><i class="strict"></i>strictly better (arrow points at the better card)</span><span><i class="close"></i>close call (arrow points at the nearly better card)</span><span><i class="side"></i>sidegrade</span><span><i class="same"></i>identical</span>
-      <span class="muted">${nodes.length} cards, ${edges.length} links${full ? ", trimmed to the nearest " + MAP_MAX : ""}</span></div>
+    ${legend(`<span class="muted">${nodes.length} cards, ${edges.length} links${full ? ", trimmed to the nearest " + MAP_MAX : ""}</span>`)}
     <div class="maplayout"><div class="mapwrap"><svg id="mapsvg" role="img" aria-label="Network of ${nodes.length} cards linked to ${esc(CARDS[centre][NAME])}. The same links are listed in the table below."></svg>
       <div class="mapzoom"><button class="btn" data-mapzoom="1.25" aria-label="Zoom in">+</button><button class="btn" data-mapzoom="0.8" aria-label="Zoom out">−</button><button class="btn" data-mapzoom="fit" aria-label="Fit to screen">⤢</button></div></div>
     <div id="mapinfo" class="chart"></div></div>
