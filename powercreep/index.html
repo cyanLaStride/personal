@@ -105,6 +105,30 @@
 
 
 
+  /* Map: a network of close calls and sidegrades around one card. */
+  .mapwrap { position: relative; border: 3px solid var(--accent); background: #000; margin: 10px 0 14px; }
+  .mapwrap svg { display: block; width: 100%; height: min(72vh, 720px); min-height: 380px; touch-action: none; cursor: grab; user-select: none; }
+  .mapwrap svg.panning { cursor: grabbing; }
+  .mapzoom { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .mapzoom button { width: 34px; height: 34px; padding: 0; }
+  .mapnode { cursor: pointer; }
+  .mapnode circle { fill: #c9c9c9; stroke: #000; stroke-width: 2; }
+  .mapnode.centre circle { fill: var(--accent); }
+  .mapnode.sel circle { stroke: var(--hover); stroke-width: 3; }
+  .mapnode text { fill: var(--text); font-size: 12px; paint-order: stroke; stroke: #000; stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
+  .mapedge { stroke-width: 2; fill: none; }
+  .mapedge.close { stroke: var(--close); }
+  .mapedge.side { stroke: var(--side); stroke-dasharray: 6 4; }
+  .mapdim .mapedge:not(.hot) { opacity: .12; }
+  .mapdim .mapnode:not(.hot) { opacity: .3; }
+  .maplegend i.close { background: var(--close); }
+  .maplegend i.side { background: repeating-linear-gradient(90deg, var(--side) 0 6px, transparent 6px 10px); }
+  .mapinfo { display: grid; grid-template-columns: 140px 1fr; gap: 16px; align-items: start; }
+  .mapinfo > img, .mapinfo > .ph { width: 140px; height: auto; border-radius: 6px; }
+  .mapinfo ul { margin: 6px 0; padding-left: 18px; }
+  .mapinfo li { margin: 2px 0; }
+  @media (max-width: 560px) { .mapinfo { grid-template-columns: 1fr; } .mapinfo > img { width: 160px; } }
+
   /* Charts. Series colours are the dark steps of a validated categorical palette, in fixed order. */
   .viz-root { --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s0: #898781;
               --grid: #2c3038; --axis: #3a3f4a; }
@@ -231,6 +255,7 @@
     <a class="navlink" href="#/deck">deck check</a>
     <a class="navlink" href="#/unbeaten">unbeaten</a>
     <a class="navlink" href="#/charts">charts</a>
+    <a class="navlink" href="#/map">map</a>
     <button class="btn" id="random">random card</button>
   </div>
 </header>
@@ -393,7 +418,8 @@ function cardView(i) {
         <button data-jump="sides" ${side.length ? "" : "disabled"}><b style="color:var(--side)">${side.length}</b><small>sidegrades</small></button>
       </div>
       <div class="meta">First printed ${c[DATE]} in ${esc(SETS[c[SET]])}.<br>
-        <a href="https://scryfall.com/search?q=${encodeURIComponent('!"' + c[NAME] + '"')}" target="_blank" rel="noopener">View on Scryfall ↗</a></div>
+        <a href="https://scryfall.com/search?q=${encodeURIComponent('!"' + c[NAME] + '"')}" target="_blank" rel="noopener">View on Scryfall ↗</a>
+        ${nearUps.length + nearDowns.length + side.length ? `<br><a href="${mapLink(i)}">Show on the map →</a>` : ""}</div>
     </aside>
     <div>
       <h1>${esc(c[NAME])} <span style="font-size:.75em">${symbols(c[COST])}</span></h1>
@@ -974,6 +1000,221 @@ function chartsView() {
     drawBars(host, rows, host.dataset.bars, s ? s.color : "var(--s0)", s ? s.label : "All new cards");
   }
 }
+
+// ---- Map: close calls and sidegrades as a network around one card ----
+const mapLink = i => "#/map/" + encodeURIComponent(CARDS[i][NAME]);
+const onMap = () => location.hash.startsWith("#/map");
+const mapState = { depth: 2, close: true, side: true, raf: 0, sel: null };
+try { Object.assign(mapState, JSON.parse(localStorage.getItem("powercreep-map") || "{}"), { raf: 0, sel: null }); } catch (e) {}
+const saveMap = () => { try { localStorage.setItem("powercreep-map", JSON.stringify({ depth: mapState.depth, close: mapState.close, side: mapState.side })); } catch (e) {} };
+const MAP_MAX = 160;
+
+// Every close call and sidegrade touching card i: [other card, "close" or "side", better card or null, pair].
+function mapLinks(i) {
+  const out = [];
+  if (mapState.close) for (const p of nearlyBetter[i].concat(nearlyWorse[i])) if (allowed(p)) out.push([p[0] === i ? p[1] : p[0], "close", p[0], p]);
+  if (mapState.side) for (const p of sides[i]) if (allowed(p)) out.push([p[0] === i ? p[1] : p[0], "side", null, p]);
+  return out;
+}
+
+function mapView(centre) {
+  document.title = (centre === undefined ? "map" : CARDS[centre][NAME] + " · map") + " · powercreep";
+  const examples = ["Command the Storm", "Shock", "Cancel", "Grizzly Bears", "Giant Growth", "Divination", "Trusty Machete"]
+    .filter(n => byName.has(n.toLowerCase()) && mapLinks(byName.get(n.toLowerCase())).length);
+  const lead = `<label>Steps out <select data-mapopt="depth">${[1, 2, 3].map(d => `<option ${d === mapState.depth ? "selected" : ""}>${d}</option>`).join("")}</select></label>
+    <label><input type="checkbox" data-mapopt="close" ${mapState.close ? "checked" : ""}> Close calls</label>
+    <label><input type="checkbox" data-mapopt="side" ${mapState.side ? "checked" : ""}> Sidegrades</label>`;
+  const head = `<h1>map</h1>
+    <p class="lead">Cards linked by close calls (nearly better or worse, arrow pointing at the better card) and sidegrades (dashed).
+      Drag to move things around, scroll or use + and − to zoom, and click a card to see its links. Search for a card while you're here to centre the map on it.</p>
+    <div class="examples">${examples.map(n => `<a class="btn" href="${mapLink(byName.get(n.toLowerCase()))}">${esc(n)}</a>`).join("")}</div>`;
+  if (centre === undefined) { app.innerHTML = head + `<p class="muted">Pick a card above, or search for one.</p>`; return; }
+
+  // Breadth-first out from the centre, nearest cards first, until the map is full.
+  const depth = new Map([[centre, 0]]), order = [centre];
+  for (let k = 0; k < order.length && order.length < MAP_MAX; k++) {
+    const i = order[k];
+    if (depth.get(i) >= mapState.depth) continue;
+    for (const [j] of mapLinks(i)) {
+      if (depth.has(j) || gone(j)) continue;
+      depth.set(j, depth.get(i) + 1); order.push(j);
+      if (order.length >= MAP_MAX) break;
+    }
+  }
+  if (order.length === 1) {
+    app.innerHTML = head + `<p class="muted">${esc(CARDS[centre][NAME])} has no close calls or sidegrades with these settings.
+      <a href="${link(centre)}">See its card page</a> for strictly better and worse cards.</p>`;
+    return;
+  }
+  const full = order.length >= MAP_MAX;
+  const edges = [], seen = new Set();
+  for (const i of order) for (const [j, kind, best, p] of mapLinks(i)) {
+    if (!depth.has(j) || seen.has(p)) continue;
+    seen.add(p); edges.push({ a: i, b: j, kind, best, p });
+  }
+  const nodes = order.map((i, k) => {
+    const d = depth.get(i), ang = k * 2.399963, r = d * 110 + (d ? Math.sqrt(k) * 4 : 0);
+    return { i, d, x: Math.cos(ang) * r, y: Math.sin(ang) * r, vx: 0, vy: 0, fixed: false, deg: 0 };
+  });
+  const at = new Map(nodes.map(n => [n.i, n]));
+  for (const e of edges) { e.s = at.get(e.a); e.t = at.get(e.b); e.s.deg++; e.t.deg++; }
+
+  app.innerHTML = head + optionsBar(lead, false) + `
+    <div class="legend maplegend"><span><i class="close"></i>close call (arrow points at the better card)</span><span><i class="side"></i>sidegrade</span>
+      <span class="muted">${nodes.length} cards, ${edges.length} links${full ? ", trimmed to the nearest " + MAP_MAX : ""}</span></div>
+    <div class="mapwrap"><svg id="mapsvg" role="img" aria-label="Network of ${nodes.length} cards linked to ${esc(CARDS[centre][NAME])}. The same links are listed in the table below."></svg>
+      <div class="mapzoom"><button class="btn" data-mapzoom="1.25" aria-label="Zoom in">+</button><button class="btn" data-mapzoom="0.8" aria-label="Zoom out">−</button><button class="btn" data-mapzoom="fit" aria-label="Fit to screen">⤢</button></div></div>
+    <div id="mapinfo" class="chart"></div>
+    <details class="deckform"><summary>Show the links as a list</summary><div class="tablewrap"><table class="datatable">
+      <thead><tr><th>Card</th><th>Link</th><th>Card</th></tr></thead>
+      <tbody>${edges.map(e => e.kind === "side"
+        ? `<tr><td><a href="${mapLink(e.a)}">${esc(CARDS[e.a][NAME])}</a></td><td>sidegrade</td><td><a href="${mapLink(e.b)}">${esc(CARDS[e.b][NAME])}</a></td></tr>`
+        : `<tr><td><a href="${mapLink(e.p[0])}">${esc(CARDS[e.p[0]][NAME])}</a></td><td>nearly better than</td><td><a href="${mapLink(e.p[1])}">${esc(CARDS[e.p[1]][NAME])}</a></td></tr>`).join("")}</tbody>
+    </table></div></details>`;
+
+  const root = document.getElementById("mapsvg");
+  const defs = svg("defs", {});
+  const marker = svg("marker", { id: "maparrow", viewBox: "0 0 10 10", refX: 10, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" });
+  marker.appendChild(svg("path", { d: "M0,0 L10,5 L0,10 z", fill: "var(--close)" }));
+  defs.appendChild(marker); root.appendChild(defs);
+  const view = svg("g", {}), edgeLayer = svg("g", {}), nodeLayer = svg("g", {});
+  view.append(edgeLayer, nodeLayer); root.appendChild(view);
+  const radius = n => n.i === centre ? 11 : Math.min(9, 5 + Math.sqrt(n.deg));
+  for (const e of edges) {
+    e.el = svg("line", { class: "mapedge " + e.kind });
+    if (e.kind === "close") e.el.setAttribute("marker-end", "url(#maparrow)");
+    edgeLayer.appendChild(e.el);
+  }
+  const labelAll = nodes.length <= 12;
+  for (const n of nodes) {
+    n.el = svg("g", { class: "mapnode" + (n.i === centre ? " centre" : ""), tabindex: 0, role: "button", "aria-label": CARDS[n.i][NAME] });
+    n.el.appendChild(svg("circle", { r: radius(n) }));
+    n.label = svg("text", { x: radius(n) + 4, y: 4 }, CARDS[n.i][NAME]);
+    n.el.appendChild(n.label);
+    n.el.addEventListener("pointerenter", ev => { if (!drag) { hot(n); showTip(ev.clientX, ev.clientY, CARDS[n.i][NAME], [[null, CARDS[n.i][TYPE], ""], [null, n.deg, n.deg === 1 ? "link on this map" : "links on this map"]]); } });
+    n.el.addEventListener("pointerleave", () => { hideTip(); if (!drag) hot(mapState.sel); });
+    n.el.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(n); } });
+    n.el.dataset.k = nodes.indexOf(n);
+    nodeLayer.appendChild(n.el);
+  }
+  const near = nodes.filter(n => n.d === 1).length;
+  const showLabel = n => { n.label.style.display = labelAll || n.i === centre || n.hot || n.d === 1 && near <= 12 && innerWidth > 700 ? "" : "none"; };
+
+  function hot(n) {
+    const on = new Set(n ? [n] : []);
+    for (const e of edges) { const h = n && (e.s === n || e.t === n); e.el.classList.toggle("hot", !!h); if (h) { on.add(e.s); on.add(e.t); } }
+    for (const m of nodes) { m.hot = on.has(m); m.el.classList.toggle("hot", m.hot); m.el.classList.toggle("sel", m === mapState.sel); showLabel(m); }
+    root.classList.toggle("mapdim", !!n);
+  }
+  function select(n, quiet) {
+    mapState.sel = quiet ? null : n; hot(mapState.sel);
+    const info = document.getElementById("mapinfo"), c = CARDS[n.i];
+    const mine = edges.filter(e => e.s === n || e.t === n).map(e => {
+      const o = e.s === n ? e.t : e.s, name = `<a href="${mapLink(o.i)}">${esc(CARDS[o.i][NAME])}</a>`;
+      return e.kind === "side" ? `<li><span style="color:var(--side)">sidegrade</span> with ${name}</li>`
+        : `<li><span style="color:var(--close)">${e.best === n.i ? "nearly better than" : "nearly worse than"}</span> ${name}</li>`;
+    });
+    info.innerHTML = `<div class="mapinfo">${image(c, "normal")}<div>
+      <h2 style="margin:0">${esc(c[NAME])} <span style="font-size:.8em">${symbols(c[COST])}</span></h2>
+      <p class="muted" style="margin:2px 0 8px">${esc(c[TYPE])}${c[SIZE] ? " · " + esc(c[SIZE]) : ""}</p>
+      <div class="examples" style="margin:0 0 6px">${n.i === centre ? "" : `<a class="btn" href="${mapLink(n.i)}">Centre the map here</a>`}<a class="btn" href="${link(n.i)}">Card page</a></div>
+      <ul>${mine.join("")}</ul></div></div>`;
+  }
+
+  // A small force layout: cards push each other apart, links pull together, everything drifts to the middle.
+  let alpha = 1;
+  function tick() {
+    for (let a = 0; a < nodes.length; a++) for (let b = a + 1; b < nodes.length; b++) {
+      const p = nodes[a], q = nodes[b];
+      let dx = q.x - p.x, dy = q.y - p.y, d2 = dx * dx + dy * dy || 0.01;
+      if (d2 > 640000) continue;
+      const f = 2600 / d2 * alpha, d = Math.sqrt(d2);
+      dx /= d; dy /= d;
+      p.vx -= dx * f; p.vy -= dy * f; q.vx += dx * f; q.vy += dy * f;
+    }
+    for (const e of edges) {
+      const dx = e.t.x - e.s.x, dy = e.t.y - e.s.y, d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+      const f = (d - 110) * 0.04 * alpha / d;
+      e.s.vx += dx * f; e.s.vy += dy * f; e.t.vx -= dx * f; e.t.vy -= dy * f;
+    }
+    for (const n of nodes) {
+      n.vx -= n.x * 0.004 * alpha; n.vy -= n.y * 0.004 * alpha;
+      if (n.fixed || n.i === centre && !n.moved) { n.vx = n.vy = 0; if (!n.fixed) n.x = n.y = 0; continue; }
+      n.vx *= 0.6; n.vy *= 0.6;
+      n.x += Math.max(-30, Math.min(30, n.vx)); n.y += Math.max(-30, Math.min(30, n.vy));
+    }
+    alpha = Math.max(0, alpha * 0.985);
+  }
+  function draw() {
+    // Zoom spreads the cards out without making the dots or names any bigger.
+    const box = root.getBoundingClientRect(), ox = box.width / 2 + cam.x, oy = box.height / 2 + cam.y;
+    for (const n of nodes) { n.sx = ox + n.x * cam.k; n.sy = oy + n.y * cam.k; }
+    for (const e of edges) {
+      const dx = e.t.sx - e.s.sx, dy = e.t.sy - e.s.sy, d = Math.sqrt(dx * dx + dy * dy) || 1;
+      // Lines stop at the edge of each circle so the arrowhead stays visible.
+      const from = e.kind === "close" && e.best !== e.t.i ? e.t : e.s, to = from === e.s ? e.t : e.s;
+      const ux = (to.sx - from.sx) / d, uy = (to.sy - from.sy) / d;
+      e.el.setAttribute("x1", from.sx + ux * radius(from)); e.el.setAttribute("y1", from.sy + uy * radius(from));
+      e.el.setAttribute("x2", to.sx - ux * (radius(to) + 2)); e.el.setAttribute("y2", to.sy - uy * (radius(to) + 2));
+    }
+    for (const n of nodes) n.el.setAttribute("transform", `translate(${n.sx.toFixed(1)},${n.sy.toFixed(1)})`);
+  }
+  const cam = { x: 0, y: 0, k: 1 };
+  let dirty = true;
+  function fit() {
+    const box = root.getBoundingClientRect();
+    let wx = 1, wy = 1;
+    for (const n of nodes) { wx = Math.max(wx, Math.abs(n.x)); wy = Math.max(wy, Math.abs(n.y)); }
+    cam.k = Math.min(1.8, (box.width / 2 - 100) / wx, (box.height / 2 - 24) / wy); cam.x = cam.y = 0; dirty = true;
+  }
+  for (let k = 0; k < 220; k++) tick();
+  alpha = 0.15; fit();
+  // Only redraw while something is moving, so an idle map costs nothing.
+  const loop = () => { if (alpha > 0.002) { tick(); dirty = true; } if (dirty) { draw(); dirty = false; } mapState.raf = requestAnimationFrame(loop); };
+  mapState.raf = requestAnimationFrame(loop);
+  select(nodes[0], true);
+
+  // Dragging a card moves it; dragging the background pans; a click without moving selects.
+  let drag = null;
+  const world = ev => { const box = root.getBoundingClientRect(); return [(ev.clientX - box.left - box.width / 2 - cam.x) / cam.k, (ev.clientY - box.top - box.height / 2 - cam.y) / cam.k]; };
+  root.addEventListener("pointerdown", ev => {
+    const g = ev.target.closest(".mapnode");
+    drag = { node: g ? nodes[+g.dataset.k] : null, x: ev.clientX, y: ev.clientY, moved: false };
+    root.setPointerCapture(ev.pointerId);
+    if (!drag.node) root.classList.add("panning");
+    hideTip();
+  });
+  root.addEventListener("pointermove", ev => {
+    if (!drag) return;
+    const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+    if (!drag.moved && dx * dx + dy * dy < 16) return;
+    drag.moved = true; dirty = true;
+    if (drag.node) { const [x, y] = world(ev); Object.assign(drag.node, { x, y, fixed: true, moved: true }); alpha = Math.max(alpha, 0.3); }
+    else { cam.x += dx; cam.y += dy; drag.x = ev.clientX; drag.y = ev.clientY; }
+  });
+  const end = () => {
+    if (!drag) return;
+    if (drag.node && !drag.moved) select(drag.node);
+    if (drag.node) drag.node.fixed = false;
+    drag = null; root.classList.remove("panning");
+  };
+  root.addEventListener("pointerup", end); root.addEventListener("pointercancel", end);
+  const zoom = (f, cx = 0, cy = 0) => {
+    const k = Math.max(0.05, Math.min(8, cam.k * f)); f = k / cam.k;
+    cam.x = cx - (cx - cam.x) * f; cam.y = cy - (cy - cam.y) * f; cam.k = k; dirty = true;
+  };
+  root.addEventListener("wheel", ev => {
+    ev.preventDefault();
+    const box = root.getBoundingClientRect();
+    zoom(Math.exp(-ev.deltaY * 0.0015), ev.clientX - box.left - box.width / 2, ev.clientY - box.top - box.height / 2);
+  }, { passive: false });
+  app.querySelector(".mapzoom").addEventListener("click", ev => {
+    const b = ev.target.closest("[data-mapzoom]");
+    if (!b) return;
+    if (b.dataset.mapzoom === "fit") fit(); else zoom(+b.dataset.mapzoom);
+  });
+}
+
 let resizeTimer;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
@@ -985,7 +1226,10 @@ function render() {
   const m = location.hash.match(/^#\/card\/(.+)$/);
   const i = m ? byName.get(decodeURIComponent(m[1]).toLowerCase()) : undefined;
   hideTip();
+  if (mapState.raf) { cancelAnimationFrame(mapState.raf); mapState.raf = 0; }
   document.body.classList.toggle("wide", location.hash.startsWith("#/unbeaten"));
+  const mm = location.hash.match(/^#\/map(?:\/(.+))?$/);
+  if (mm) { const ci = mm[1] ? byName.get(decodeURIComponent(mm[1]).toLowerCase()) : undefined; mapView(ci === undefined || gone(ci) ? undefined : ci); return; }
   if (onDeck()) deckView(); else if (location.hash.startsWith("#/charts")) chartsView();
   else if (location.hash.startsWith("#/unbeaten")) unbeatenView();
   else if (i === undefined) homeView(); else cardView(i);
@@ -1004,6 +1248,8 @@ window.addEventListener("hashchange", route);
 
 app.addEventListener("change", e => {
   if (e.target.dataset.deckopt) { deck.only = e.target.checked; deck.sel = 0; rerender(); return; }
+  const mk = e.target.dataset.mapopt;
+  if (mk) { mapState[mk] = e.target.type === "checkbox" ? e.target.checked : +e.target.value; saveMap(); rerender(); return; }
   const key = e.target.dataset.opt;
   if (!key) return;
   opts[key] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
@@ -1065,10 +1311,10 @@ function search() {
   }
   active = 0;
   box.hidden = !hits.length;
-  box.innerHTML = hits.map((i, k) => `<a href="${link(i)}" class="${k === active ? "on" : ""}">
+  box.innerHTML = hits.map((i, k) => `<a href="${onMap() ? mapLink(i) : link(i)}" class="${k === active ? "on" : ""}">
     <span>${esc(CARDS[i][NAME])}</span><small>${better[i].filter(allowed).length} better · ${worse[i].filter(allowed).length} worse</small></a>`).join("");
 }
-function go(i) { location.hash = link(i); q.value = ""; box.hidden = true; q.blur(); }
+function go(i) { location.hash = onMap() ? mapLink(i) : link(i); q.value = ""; box.hidden = true; q.blur(); }
 q.addEventListener("input", search);
 q.addEventListener("focus", search);
 q.addEventListener("keydown", e => {
