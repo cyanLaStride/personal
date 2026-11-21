@@ -1016,7 +1016,8 @@ const onMap = () => location.hash.startsWith("#/map");
 const mapState = { depth: 2, close: true, side: true, strict: true, same: true, raf: 0, sel: null };
 try { Object.assign(mapState, JSON.parse(localStorage.getItem("powercreep-map") || "{}"), { raf: 0, sel: null }); } catch (e) {}
 const saveMap = () => { try { localStorage.setItem("powercreep-map", JSON.stringify({ depth: mapState.depth, close: mapState.close, side: mapState.side, strict: mapState.strict, same: mapState.same })); } catch (e) {} };
-const MAP_MAX = 160;
+// Up to three steps the map stays readable at 160 cards; past that it's for fun, so it gets more room.
+const mapMax = () => mapState.depth <= 3 ? 160 : 700;
 // What each kind of link says, from the better card and from the worse one, and its colour.
 const MAP_WORDS = { strict: ["better than", "worse than", "var(--up)"], close: ["nearly better than", "nearly worse than", "var(--close)"],
   side: ["sidegrade with", "sidegrade with", "var(--side)"], same: ["identical to", "identical to", "var(--same)"] };
@@ -1049,7 +1050,7 @@ function mapLinks(i) {
 
 function mapView(centre) {
   document.title = (centre === undefined ? "map" : CARDS[centre][NAME] + " · map") + " · powercreep";
-  const lead = `<label>Steps out <select data-mapopt="depth">${[1, 2, 3].map(d => `<option ${d === mapState.depth ? "selected" : ""}>${d}</option>`).join("")}</select></label>
+  const lead = `<label>Steps out <input type="number" data-mapopt="depth" min="1" max="100" value="${mapState.depth}" style="width:4.5em;padding:3px 6px;background:var(--panel);border:1px solid var(--line)"></label>
 `;
   // The legend doubles as the switches: each kind of link has its checkbox beside its line.
   const legend = extra => `<div class="legend maplegend">${[
@@ -1061,6 +1062,7 @@ function mapView(centre) {
 
   // Breadth-first out from the centre, nearest cards first, until the map is full.
   const depth = new Map([[centre, 0]]), order = [centre];
+  const MAP_MAX = mapMax();
   for (let k = 0; k < order.length && order.length < MAP_MAX; k++) {
     const i = order[k];
     if (depth.get(i) >= mapState.depth) continue;
@@ -1110,7 +1112,8 @@ function mapView(centre) {
   root.appendChild(defs);
   const view = svg("g", {}), edgeLayer = svg("g", {}), nodeLayer = svg("g", {});
   view.append(edgeLayer, nodeLayer); root.appendChild(view);
-  const radius = n => n.i === centre ? 11 : Math.min(9, 5 + Math.sqrt(n.deg));
+  const small = nodes.length > 200 ? 0.5 : 1;  // big maps get smaller dots so they don't become one blob
+  const radius = n => n.i === centre ? 11 : Math.min(9, 5 + Math.sqrt(n.deg)) * small;
   for (const e of edges) {
     e.el = svg("line", { class: "mapedge " + e.kind });
     if (e.best !== null) e.el.setAttribute("marker-end", "url(#maparrow-" + e.kind + ")");
@@ -1199,7 +1202,7 @@ function mapView(centre) {
     for (const n of nodes) { wx = Math.max(wx, Math.abs(n.x)); wy = Math.max(wy, Math.abs(n.y)); }
     cam.k = Math.min(1.8, (box.width / 2 - 100) / wx, (box.height / 2 - 24) / wy); cam.x = cam.y = 0; dirty = true;
   }
-  for (let k = 0; k < 220; k++) tick();
+  for (let k = 0, n = nodes.length > 300 ? 120 : 220; k < n; k++) tick();
   alpha = 0.15; fit();
   // Only redraw while something is moving, so an idle map costs nothing.
   const loop = () => { if (alpha > 0.002) { tick(); dirty = true; } if (dirty) { draw(); dirty = false; } mapState.raf = requestAnimationFrame(loop); };
@@ -1283,7 +1286,7 @@ window.addEventListener("hashchange", route);
 app.addEventListener("change", e => {
   if (e.target.dataset.deckopt) { deck.only = e.target.checked; deck.sel = 0; rerender(); return; }
   const mk = e.target.dataset.mapopt;
-  if (mk) { mapState[mk] = e.target.type === "checkbox" ? e.target.checked : +e.target.value; saveMap(); rerender(); return; }
+  if (mk) { mapState[mk] = e.target.type === "checkbox" ? e.target.checked : Math.max(1, Math.min(100, Math.round(+e.target.value) || 1)); saveMap(); rerender(); return; }
   const key = e.target.dataset.opt;
   if (!key) return;
   opts[key] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
