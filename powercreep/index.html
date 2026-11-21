@@ -299,9 +299,15 @@ const sideRows = i => sides[i].filter(allowed).map(p => p[0] === i
 const twins = CARDS.map(() => []);
 for (const g of SAME) for (const i of g) twins[i] = g.filter(j => j !== i);
 
-const opts = { likely: true, shift: false, sameTypes: false, generous: false, noUB: false, sort: "close",
-  ubSort: "mv", ubColours: "", ubColourMode: "exact", ubMV: "" };
-try { Object.assign(opts, JSON.parse(localStorage.getItem("powercreep-opts") || "{}")); } catch (e) {}
+// Every checkbox starts on except "shared types only" (user's choice, 2026-11-21).
+const opts = { likely: true, shift: true, sameTypes: false, generous: true, noUB: true, sort: "close",
+  ubSort: "mv", ubColours: "", ubColourMode: "exact", ubMV: "", v: 2 };
+try {
+  const saved = JSON.parse(localStorage.getItem("powercreep-opts") || "{}");
+  // Settings saved before the defaults changed keep everything but the checkboxes.
+  if (saved.v !== 2) for (const k of ["likely", "shift", "sameTypes", "generous", "noUB"]) delete saved[k];
+  Object.assign(opts, saved, { v: 2 });
+} catch (e) {}
 const saveOpts = () => { try { localStorage.setItem("powercreep-opts", JSON.stringify(opts)); } catch (e) {} };
 // Pairs flagged 32 only hold in generous mode, and replace any weaker version of the same pair.
 const generousKeys = new Set();
