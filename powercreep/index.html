@@ -107,8 +107,8 @@
 
   /* Map: a network of close calls and sidegrades around one card. */
   .mapwrap { position: relative; border: 3px solid var(--accent); background: #000; margin: 10px 0 14px; }
-  .mapwrap svg { display: block; width: 100%; height: min(72vh, 720px); min-height: 380px; touch-action: none; cursor: grab; user-select: none; }
-  .mapwrap svg.panning { cursor: grabbing; }
+  .mapwrap canvas { display: block; width: 100%; height: min(72vh, 720px); min-height: 380px; touch-action: none; cursor: grab; user-select: none; }
+  .mapwrap canvas.panning { cursor: grabbing !important; }
   .mapzoom { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; gap: 6px; }
   .mapzoom button { width: 34px; height: 34px; padding: 0; }
   .mapnode { cursor: pointer; }
@@ -1097,58 +1097,46 @@ function mapView(centre) {
 
   app.innerHTML = head + optionsBar(lead, false) + `
     ${legend(`<span class="muted">${nodes.length} cards, ${edges.length} links${full ? ", trimmed to the nearest " + MAP_MAX : ""}</span>`)}
-    <div class="maplayout"><div class="mapwrap"><svg id="mapsvg" role="img" aria-label="Network of ${nodes.length} cards linked to ${esc(CARDS[centre][NAME])}. The same links are listed in the table below."></svg>
+    <div class="maplayout"><div class="mapwrap"><canvas id="mapsvg" role="img" aria-label="Network of ${nodes.length} cards linked to ${esc(CARDS[centre][NAME])}. The same links are listed below the map."></canvas>
       <div class="mapzoom"><button class="btn" data-mapzoom="1.25" aria-label="Zoom in">+</button><button class="btn" data-mapzoom="0.8" aria-label="Zoom out">−</button><button class="btn" data-mapzoom="fit" aria-label="Fit to screen">⤢</button></div></div>
     <div id="mapinfo" class="chart"></div></div>
-    <details class="deckform"><summary>Show the links as a list</summary><div class="tablewrap"><table class="datatable">
+    <details class="deckform" id="maplist"><summary>Show the links as a list</summary><div class="tablewrap"><table class="datatable">
       <thead><tr><th>Card</th><th>Link</th><th>Card</th></tr></thead>
-      <tbody>${edges.map(e => {
-        const [x, y] = e.best === null ? [e.a, e.b] : [e.p[0], e.p[1]];
-        return `<tr><td><a href="${mapLink(x)}">${esc(CARDS[x][NAME])}</a></td><td>${MAP_WORDS[e.kind][0]}</td><td><a href="${mapLink(y)}">${esc(CARDS[y][NAME])}</a></td></tr>`;
-      }).join("")}</tbody>
+      <tbody id="maprows"></tbody>
     </table></div></details>`;
 
-  const root = document.getElementById("mapsvg");
-  const defs = svg("defs", {});
-  for (const [kind, colour] of [["close", "var(--close)"], ["strict", "var(--up)"]]) {
-    const marker = svg("marker", { id: "maparrow-" + kind, viewBox: "0 0 10 10", refX: 10, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" });
-    marker.appendChild(svg("path", { d: "M0,0 L10,5 L0,10 z", fill: colour }));
-    defs.appendChild(marker);
-  }
-  root.appendChild(defs);
-  const view = svg("g", {}), edgeLayer = svg("g", {}), nodeLayer = svg("g", {});
-  view.append(edgeLayer, nodeLayer); root.appendChild(view);
+  // The list can run to thousands of rows, so it's only built when someone opens it.
+  document.getElementById("maplist").addEventListener("toggle", ev => {
+    const body = document.getElementById("maprows");
+    if (!ev.target.open || body.childElementCount) return;
+    body.innerHTML = edges.map(e => {
+      const [x, y] = e.best === null ? [e.a, e.b] : [e.p[0], e.p[1]];
+      return `<tr><td><a href="${mapLink(x)}">${esc(CARDS[x][NAME])}</a></td><td>${MAP_WORDS[e.kind][0]}</td><td><a href="${mapLink(y)}">${esc(CARDS[y][NAME])}</a></td></tr>`;
+    }).join("");
+  });
+  // Drawn on a canvas: thousands of links as SVG elements made big maps crawl (80ms a frame at 700 cards).
+  const root = document.getElementById("mapsvg"), ctx = root.getContext("2d");
+  const css = getComputedStyle(document.documentElement), col = v => css.getPropertyValue(v).trim();
+  const COLOURS = { close: col("--close"), side: col("--side"), strict: col("--up"), same: col("--same") };
+  const DASH = { close: [], strict: [], side: [6, 4], same: [2, 4] };
+  const FONT = "12px " + getComputedStyle(document.body).fontFamily, ACCENT = col("--accent"), HOVER = col("--hover") || "cyan";
   const small = nodes.length > 200 ? 0.5 : 1;  // big maps get smaller dots so they don't become one blob
   const radius = n => n.i === centre ? 11 : Math.min(9, 5 + Math.sqrt(n.deg)) * small;
-  for (const e of edges) {
-    e.el = svg("line", { class: "mapedge " + e.kind });
-    if (e.best !== null) e.el.setAttribute("marker-end", "url(#maparrow-" + e.kind + ")");
-    edgeLayer.appendChild(e.el);
-  }
   const labelAll = nodes.length <= 12;
-  for (const n of nodes) {
-    n.el = svg("g", { class: "mapnode" + (n.i === centre ? " centre" : ""), tabindex: 0, role: "button", "aria-label": CARDS[n.i][NAME] });
-    n.el.appendChild(svg("circle", { r: radius(n) }));
-    n.label = svg("text", { x: radius(n) + 4, y: 4 }, CARDS[n.i][NAME]);
-    n.el.appendChild(n.label);
-    n.el.addEventListener("pointerenter", ev => { if (!drag) { hot(n); if (ev.pointerType === "mouse") showPeek(n.i, ev); } });
-    n.el.addEventListener("pointermove", ev => { if (!drag && ev.pointerType === "mouse") placePeek(ev); });
-    n.el.addEventListener("pointerleave", () => { hidePeek(); if (!drag) hot(mapState.sel); });
-    n.el.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(n); } });
-    n.el.dataset.k = nodes.indexOf(n);
-    nodeLayer.appendChild(n.el);
-  }
   const near = nodes.filter(n => n.d === 1).length;
-  const showLabel = n => { n.label.style.display = labelAll || n.i === centre || n.hot || n.d === 1 && near <= 12 && innerWidth > 700 ? "" : "none"; };
+  const showLabel = n => labelAll || n.i === centre || n.hot || n.d === 1 && near <= 12 && innerWidth > 700;
+  let focus = null;  // the card whose links are lit up, if any
+  const ARROW_LIMIT = 1500;
 
   function hot(n) {
-    const on = new Set(n ? [n] : []);
-    for (const e of edges) { const h = n && (e.s === n || e.t === n); e.el.classList.toggle("hot", !!h); if (h) { on.add(e.s); on.add(e.t); } }
-    for (const m of nodes) { m.hot = on.has(m); m.el.classList.toggle("hot", m.hot); m.el.classList.toggle("sel", m === mapState.sel); showLabel(m); }
-    root.classList.toggle("mapdim", !!n);
+    focus = n || null;
+    for (const m of nodes) m.hot = false;
+    for (const e of edges) { e.hot = !!n && (e.s === n || e.t === n); if (e.hot) { e.s.hot = e.t.hot = true; } }
+    if (n) n.hot = true;
+    dirty = true;
   }
   function select(n, quiet) {
-    mapState.sel = quiet ? null : n; hot(mapState.sel);
+    mapState.sel = quiet ? null : n; hot(mapState.sel); dirty = true;
     const info = document.getElementById("mapinfo"), c = CARDS[n.i];
     const mine = edges.filter(e => e.s === n || e.t === n).map(e => {
       const o = e.s === n ? e.t : e.s, name = `<a href="${mapLink(o.i)}">${esc(CARDS[o.i][NAME])}</a>`;
@@ -1188,17 +1176,55 @@ function mapView(centre) {
   }
   function draw() {
     // Zoom spreads the cards out without making the dots or names any bigger.
-    const box = root.getBoundingClientRect(), ox = box.width / 2 + cam.x, oy = box.height / 2 + cam.y;
+    const w = root.clientWidth, h = root.clientHeight, dpr = devicePixelRatio || 1;
+    if (root.width !== Math.round(w * dpr) || root.height !== Math.round(h * dpr)) { root.width = Math.round(w * dpr); root.height = Math.round(h * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const ox = w / 2 + cam.x, oy = h / 2 + cam.y;
     for (const n of nodes) { n.sx = ox + n.x * cam.k; n.sy = oy + n.y * cam.k; }
-    for (const e of edges) {
-      const dx = e.t.sx - e.s.sx, dy = e.t.sy - e.s.sy, d = Math.sqrt(dx * dx + dy * dy) || 1;
-      // Lines stop at the edge of each circle so the arrowhead stays visible.
-      const from = e.best !== null && e.best !== e.t.i ? e.t : e.s, to = from === e.s ? e.t : e.s;
-      const ux = (to.sx - from.sx) / d, uy = (to.sy - from.sy) / d;
-      e.el.setAttribute("x1", from.sx + ux * radius(from)); e.el.setAttribute("y1", from.sy + uy * radius(from));
-      e.el.setAttribute("x2", to.sx - ux * (radius(to) + 2)); e.el.setAttribute("y2", to.sy - uy * (radius(to) + 2));
+    // Links: one path per kind, faded ones first so the lit ones sit on top.
+    ctx.lineWidth = 2; ctx.lineCap = "round";
+    for (const lit of focus ? [false, true] : [false]) {
+      ctx.globalAlpha = focus && !lit ? 0.12 : 1;
+      for (const kind of ["strict", "close", "side", "same"]) {
+        ctx.strokeStyle = ctx.fillStyle = COLOURS[kind]; ctx.setLineDash(DASH[kind]);
+        const heads = [];
+        for (const e of edges) {
+          if (e.kind !== kind || (focus && e.hot !== lit)) continue;
+          const from = e.best !== null && e.best !== e.t.i ? e.t : e.s, to = from === e.s ? e.t : e.s;
+          const dx = to.sx - from.sx, dy = to.sy - from.sy, d = Math.sqrt(dx * dx + dy * dy) || 1, ux = dx / d, uy = dy / d;
+          // Lines stop at the edge of each circle so the arrowhead stays visible.
+          const x2 = to.sx - ux * (radius(to) + 2), y2 = to.sy - uy * (radius(to) + 2);
+          // One stroke per line: a single path with thousands of crossing lines is far slower to fill.
+          ctx.beginPath(); ctx.moveTo(from.sx + ux * radius(from), from.sy + uy * radius(from)); ctx.lineTo(x2, y2); ctx.stroke();
+          // On huge maps arrowheads are unreadable anyway, and filling thousands was the slowest part of a frame.
+          if (e.best !== null && (lit || edges.length <= ARROW_LIMIT)) heads.push(x2, y2, ux, uy);
+        }
+        ctx.setLineDash([]);
+        for (let k = 0; k < heads.length; k += 4) {
+          const x = heads[k], y = heads[k + 1], ux = heads[k + 2], uy = heads[k + 3];
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - ux * 9 - uy * 4.5, y - uy * 9 + ux * 4.5); ctx.lineTo(x - ux * 9 + uy * 4.5, y - uy * 9 - ux * 4.5); ctx.fill();
+        }
+      }
     }
-    for (const n of nodes) n.el.setAttribute("transform", `translate(${n.sx.toFixed(1)},${n.sy.toFixed(1)})`);
+    ctx.setLineDash([]);
+    // Cards, then names on top with a dark outline so they read over the lines.
+    for (const lit of focus ? [false, true] : [false]) {
+      ctx.globalAlpha = focus && !lit ? 0.3 : 1;
+      for (const n of nodes) {
+        if (focus && n.hot !== lit) continue;
+        ctx.beginPath(); ctx.arc(n.sx, n.sy, radius(n), 0, Math.PI * 2);
+        ctx.fillStyle = n.i === centre ? ACCENT : "#c9c9c9"; ctx.fill();
+        const sel = n === mapState.sel;
+        ctx.lineWidth = sel ? 3 : 2; ctx.strokeStyle = sel ? HOVER : "#000"; ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1; ctx.font = FONT; ctx.textBaseline = "middle"; ctx.lineJoin = "round"; ctx.lineWidth = 4; ctx.strokeStyle = "#000"; ctx.fillStyle = "#fff";
+    for (const n of nodes) {
+      if (!showLabel(n)) continue;
+      const x = n.sx + radius(n) + 4, name = CARDS[n.i][NAME];
+      ctx.strokeText(name, x, n.sy); ctx.fillText(name, x, n.sy);
+    }
   }
   const cam = { x: 0, y: 0, k: 1 };
   let dirty = true;
@@ -1218,16 +1244,34 @@ function mapView(centre) {
   // Dragging a card moves it; dragging the background pans; a click without moving selects.
   let drag = null;
   const world = ev => { const box = root.getBoundingClientRect(); return [(ev.clientX - box.left - box.width / 2 - cam.x) / cam.k, (ev.clientY - box.top - box.height / 2 - cam.y) / cam.k]; };
+  // The card under the pointer, if any: the top-most dot within a few pixels.
+  const hit = ev => {
+    const box = root.getBoundingClientRect(), x = ev.clientX - box.left, y = ev.clientY - box.top;
+    for (let k = nodes.length - 1; k >= 0; k--) {
+      const n = nodes[k], r = radius(n) + 4;
+      if ((n.sx - x) ** 2 + (n.sy - y) ** 2 <= r * r) return n;
+    }
+    return null;
+  };
+  let over = null;
+  root.addEventListener("pointerleave", () => { if (!drag && over) { over = null; hidePeek(); hot(mapState.sel); root.style.cursor = ""; } });
+  root.addEventListener("keydown", ev => { if (ev.key === "Enter" && mapState.sel) select(mapState.sel); });
   root.addEventListener("pointerdown", ev => {
-    const g = ev.target.closest(".mapnode");
-    drag = { node: g ? nodes[+g.dataset.k] : null, x: ev.clientX, y: ev.clientY, moved: false };
+    const g = hit(ev);
+    drag = { node: g, x: ev.clientX, y: ev.clientY, moved: false };
     root.setPointerCapture(ev.pointerId);
     hidePeek();
     if (!drag.node) root.classList.add("panning");
     hideTip();
   });
   root.addEventListener("pointermove", ev => {
-    if (!drag) return;
+    if (!drag) {
+      // Hovering: light up the card's links and show the card beside the pointer.
+      const n = hit(ev);
+      if (n !== over) { over = n; hot(n || mapState.sel); root.style.cursor = n ? "pointer" : ""; if (!n) hidePeek(); }
+      if (n && ev.pointerType === "mouse") showPeek(n.i, ev);
+      return;
+    }
     const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
     if (!drag.moved && dx * dx + dy * dy < 16) return;
     drag.moved = true; dirty = true;
@@ -1237,6 +1281,7 @@ function mapView(centre) {
   const end = () => {
     if (!drag) return;
     if (drag.node && !drag.moved) select(drag.node);
+    dirty = true;
     if (drag.node) drag.node.fixed = false;
     drag = null; root.classList.remove("panning");
   };
