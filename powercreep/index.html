@@ -1023,7 +1023,7 @@ const mapState = { depth: 2, close: true, side: true, strict: true, same: true, 
 try { Object.assign(mapState, JSON.parse(localStorage.getItem("powercreep-map") || "{}"), { raf: 0, sel: null }); } catch (e) {}
 const saveMap = () => { try { localStorage.setItem("powercreep-map", JSON.stringify({ depth: mapState.depth, close: mapState.close, side: mapState.side, strict: mapState.strict, same: mapState.same })); } catch (e) {} };
 // Up to three steps the map stays readable at 160 cards; past that it's for fun, so it gets more room.
-const mapMax = () => mapState.depth <= 3 ? 160 : 700;
+const mapMax = () => mapState.depth <= 3 ? 160 : 8000;
 // What each kind of link says, from the better card and from the worse one, and its colour.
 const MAP_WORDS = { strict: ["better than", "worse than", "var(--up)"], close: ["nearly better than", "nearly worse than", "var(--close)"],
   side: ["sidegrade with", "sidegrade with", "var(--side)"], same: ["identical to", "identical to", "var(--same)"] };
@@ -1089,7 +1089,8 @@ function mapView(centre) {
     seen.add(p); edges.push({ a: i, b: j, kind, best, p });
   }
   const nodes = order.map((i, k) => {
-    const d = depth.get(i), ang = k * 2.399963, r = d * 110 + (d ? Math.sqrt(k) * 4 : 0);
+    // Start in a sunflower spiral, nearest cards innermost: evenly spread, so the layout has less to untangle.
+    const d = depth.get(i), ang = k * 2.399963, r = 45 * Math.sqrt(k);
     return { i, d, x: Math.cos(ang) * r, y: Math.sin(ang) * r, vx: 0, vy: 0, fixed: false, deg: 0 };
   });
   const at = new Map(nodes.map(n => [n.i, n]));
@@ -1120,7 +1121,7 @@ function mapView(centre) {
   const COLOURS = { close: col("--close"), side: col("--side"), strict: col("--up"), same: col("--same") };
   const DASH = { close: [], strict: [], side: [6, 4], same: [2, 4] };
   const FONT = "12px " + getComputedStyle(document.body).fontFamily, ACCENT = col("--accent"), HOVER = col("--hover") || "cyan";
-  const small = nodes.length > 200 ? 0.5 : 1;  // big maps get smaller dots so they don't become one blob
+  const small = nodes.length > 2000 ? 0.3 : nodes.length > 200 ? 0.5 : 1;  // big maps get smaller dots so they don't become one blob
   const radius = n => n.i === centre ? 11 : Math.min(9, 5 + Math.sqrt(n.deg)) * small;
   const labelAll = nodes.length <= 12;
   const near = nodes.filter(n => n.d === 1).length;
@@ -1153,13 +1154,27 @@ function mapView(centre) {
   // A small force layout: cards push each other apart, links pull together, everything drifts to the middle.
   let alpha = 1;
   function tick() {
-    for (let a = 0; a < nodes.length; a++) for (let b = a + 1; b < nodes.length; b++) {
-      const p = nodes[a], q = nodes[b];
-      let dx = q.x - p.x, dy = q.y - p.y, d2 = dx * dx + dy * dy || 0.01;
-      if (d2 > 640000) continue;
-      const f = 2600 / d2 * alpha, d = Math.sqrt(d2);
-      dx /= d; dy /= d;
-      p.vx -= dx * f; p.vy -= dy * f; q.vx += dx * f; q.vy += dy * f;
+    // Repulsion only between cards in neighbouring grid cells: beyond about 300 units the push is
+    // negligible, and checking every pair would grow with the square of the map's size.
+    const C = 300, grid = new Map(), cell = (x, y) => (Math.floor(x / C) + 5000) * 10000 + Math.floor(y / C) + 5000;
+    for (let k = 0; k < nodes.length; k++) {
+      const p = nodes[k], key = cell(p.x, p.y);
+      p.k = k; let list = grid.get(key); if (!list) grid.set(key, list = []); list.push(p);
+    }
+    for (const p of nodes) {
+      const cx = Math.floor(p.x / C) + 5000, cy = Math.floor(p.y / C) + 5000;
+      for (let gx = cx - 1; gx <= cx + 1; gx++) for (let gy = cy - 1; gy <= cy + 1; gy++) {
+        const list = grid.get(gx * 10000 + gy);
+        if (!list) continue;
+        for (const q of list) {
+          if (q.k <= p.k) continue;
+          let dx = q.x - p.x, dy = q.y - p.y, d2 = dx * dx + dy * dy || 0.01;
+          if (d2 > C * C) continue;
+          const f = 2600 / d2 * alpha, d = Math.sqrt(d2);
+          dx /= d; dy /= d;
+          p.vx -= dx * f; p.vy -= dy * f; q.vx += dx * f; q.vy += dy * f;
+        }
+      }
     }
     for (const e of edges) {
       const dx = e.t.x - e.s.x, dy = e.t.y - e.s.y, d = Math.sqrt(dx * dx + dy * dy) || 0.01;
@@ -1172,7 +1187,7 @@ function mapView(centre) {
       n.vx *= 0.6; n.vy *= 0.6;
       n.x += Math.max(-30, Math.min(30, n.vx)); n.y += Math.max(-30, Math.min(30, n.vy));
     }
-    alpha = Math.max(0, alpha * 0.985);
+    alpha = Math.max(0, alpha * (nodes.length > 2000 ? 0.97 : 0.985));
   }
   function draw() {
     // Zoom spreads the cards out without making the dots or names any bigger.
@@ -1216,7 +1231,7 @@ function mapView(centre) {
         ctx.beginPath(); ctx.arc(n.sx, n.sy, radius(n), 0, Math.PI * 2);
         ctx.fillStyle = n.i === centre ? ACCENT : "#c9c9c9"; ctx.fill();
         const sel = n === mapState.sel;
-        ctx.lineWidth = sel ? 3 : 2; ctx.strokeStyle = sel ? HOVER : "#000"; ctx.stroke();
+        ctx.lineWidth = sel ? 3 : small < 1 ? 1 : 2; ctx.strokeStyle = sel ? HOVER : "#000"; ctx.stroke();
       }
     }
     ctx.globalAlpha = 1; ctx.font = FONT; ctx.textBaseline = "middle"; ctx.lineJoin = "round"; ctx.lineWidth = 4; ctx.strokeStyle = "#000"; ctx.fillStyle = "#fff";
@@ -1227,17 +1242,53 @@ function mapView(centre) {
     }
   }
   const cam = { x: 0, y: 0, k: 1 };
-  let dirty = true;
+  let dirty = true, camMoved = false, touched = false, crisp = 0, lastFull = 0;
+  // On big maps, panning and zooming reuse a snapshot of the last full drawing, then redraw sharply once you stop.
+  const big = edges.length > 3000, snap = document.createElement("canvas"), shot = { x: 0, y: 0, k: 1, ok: false };
+  function takeSnap() {
+    if (!big) return;
+    snap.width = root.width; snap.height = root.height;
+    snap.getContext("2d").drawImage(root, 0, 0);
+    Object.assign(shot, { x: cam.x, y: cam.y, k: cam.k, ok: true });
+  }
+  function quickDraw() {
+    const w = root.clientWidth, h = root.clientHeight, dpr = devicePixelRatio || 1, f = cam.k / shot.k;
+    const o0x = w / 2 + shot.x, o0y = h / 2 + shot.y, o1x = w / 2 + cam.x, o1y = h / 2 + cam.y;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+    ctx.setTransform(dpr * f, 0, 0, dpr * f, dpr * (o1x - f * o0x), dpr * (o1y - f * o0y));
+    ctx.drawImage(snap, 0, 0, w, h);
+  }
   function fit() {
     const box = root.getBoundingClientRect();
     let wx = 1, wy = 1;
     for (const n of nodes) { wx = Math.max(wx, Math.abs(n.x)); wy = Math.max(wy, Math.abs(n.y)); }
     cam.k = Math.min(1.8, (box.width / 2 - 100) / wx, (box.height / 2 - 24) / wy); cam.x = cam.y = 0; dirty = true;
+    for (const n of nodes) { n.sx = box.width / 2 + n.x * cam.k; n.sy = box.height / 2 + n.y * cam.k; }
   }
-  for (let k = 0, n = nodes.length > 300 ? 120 : 220; k < n; k++) tick();
-  alpha = 0.15; fit();
+  // Settle most of the layout before showing it, but never freeze the page for more than a moment:
+  // big maps finish settling on screen.
+  const until = performance.now() + 120;
+  let pre = 0;
+  while (pre < 220 && performance.now() < until) { tick(); pre++; }
+  if (pre === 220) alpha = 0.15;
+  fit();
   // Only redraw while something is moving, so an idle map costs nothing.
-  const loop = () => { if (alpha > 0.002) { tick(); dirty = true; } if (dirty) { draw(); dirty = false; } mapState.raf = requestAnimationFrame(loop); };
+  const loop = () => {
+    if (alpha > 0.002) {
+      // Big maps spend longer on the layout each frame and redraw only a few times a second while settling.
+      const now = performance.now(), stop = now + (big ? 30 : 10);
+      do tick(); while (alpha > 0.002 && performance.now() < stop);
+      if (!big || now - lastFull > 300 || alpha <= 0.002) dirty = true;
+      if (alpha <= 0.002 && !touched) fit();  // it grew while settling: frame it again
+    }
+    if (dirty) { draw(); dirty = false; camMoved = false; takeSnap(); lastFull = performance.now(); }
+    else if (camMoved) {
+      camMoved = false;
+      if (big && shot.ok) { quickDraw(); clearTimeout(crisp); crisp = setTimeout(() => { dirty = true; }, 150); }
+      else { draw(); takeSnap(); }
+    }
+    mapState.raf = requestAnimationFrame(loop);
+  };
   mapState.raf = requestAnimationFrame(loop);
   select(nodes[0], true);
 
@@ -1274,21 +1325,21 @@ function mapView(centre) {
     }
     const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
     if (!drag.moved && dx * dx + dy * dy < 16) return;
-    drag.moved = true; dirty = true;
-    if (drag.node) { const [x, y] = world(ev); Object.assign(drag.node, { x, y, fixed: true, moved: true }); alpha = Math.max(alpha, 0.3); }
-    else { cam.x += dx; cam.y += dy; drag.x = ev.clientX; drag.y = ev.clientY; }
+    drag.moved = true; touched = true;
+    if (drag.node) { const [x, y] = world(ev); Object.assign(drag.node, { x, y, fixed: true, moved: true }); alpha = Math.max(alpha, 0.3); dirty = true; }
+    else { cam.x += dx; cam.y += dy; drag.x = ev.clientX; drag.y = ev.clientY; camMoved = true; }
   });
   const end = () => {
     if (!drag) return;
     if (drag.node && !drag.moved) select(drag.node);
-    dirty = true;
+    if (drag.node) dirty = true;
     if (drag.node) drag.node.fixed = false;
     drag = null; root.classList.remove("panning");
   };
   root.addEventListener("pointerup", end); root.addEventListener("pointercancel", end);
   const zoom = (f, cx = 0, cy = 0) => {
     const k = Math.max(0.05, Math.min(8, cam.k * f)); f = k / cam.k;
-    cam.x = cx - (cx - cam.x) * f; cam.y = cy - (cy - cam.y) * f; cam.k = k; dirty = true;
+    cam.x = cx - (cx - cam.x) * f; cam.y = cy - (cy - cam.y) * f; cam.k = k; camMoved = true; touched = true;
   };
   root.addEventListener("wheel", ev => {
     ev.preventDefault();
