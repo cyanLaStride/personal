@@ -105,6 +105,10 @@
 
 
 
+  .oracle { border: 3px solid var(--accent); padding: 10px 14px; margin: 0 0 18px; max-width: 640px; line-height: 1.45; }
+  .oracle p { margin: 0 0 6px; } .oracle p:last-child { margin-bottom: 0; }
+  .oracle .oface { font-weight: 700; margin-top: 8px; } .oracle .oface:first-child { margin-top: 0; }
+
   /* Map: a network of close calls and sidegrades around one card. */
   .mapwrap { position: relative; border: 3px solid var(--accent); background: #000; margin: 10px 0 14px; }
   .mapwrap canvas { display: block; width: 100%; height: min(72vh, 720px); min-height: 380px; touch-action: none; cursor: grab; user-select: none; }
@@ -438,11 +442,40 @@ function cardView(i) {
     </aside>
     <div>
       <h1>${esc(c[NAME])} <span style="font-size:.75em">${symbols(c[COST])}</span></h1>
-      <p class="muted" style="margin:0 0 18px">${esc(c[TYPE])}${c[SIZE] ? " · " + esc(c[SIZE]) : ""}</p>
+      <p class="muted" style="margin:0 0 12px">${esc(c[TYPE])}${c[SIZE] ? " · " + esc(c[SIZE]) : ""}</p>
+      <div class="oracle" id="oracle" aria-live="polite">${oracleCache.has(c[NAME]) ? oracleCache.get(c[NAME]) : `<p class="muted">Loading card text…</p>`}</div>
       ${optionsBar()}
       ${body}
     </div>
   </div>`;
+  if (!oracleCache.has(c[NAME])) loadOracle(c);
+}
+
+// The card's current rules text, fetched from Scryfall when the page opens (too big to ship for
+// every card in data.js). Old cards are much easier to read in modern wording than in their art.
+const oracleCache = new Map();
+function oracleHtml(card) {
+  const faces = card.card_faces && card.card_faces.some(f => f.oracle_text !== undefined) ? card.card_faces : [card];
+  const lines = text => (text || "").split("\n").filter(Boolean).map(l =>
+    `<p>${symbols(l).replace(/\(([^()]*)\)/g, '<i class="muted">($1)</i>')}</p>`).join("");
+  return faces.map(f => (faces.length > 1 ? `<p class="oface">${esc(f.name)} <span>${symbols(f.mana_cost || "")}</span></p>` : "")
+    + (lines(f.oracle_text) || `<p class="muted">No rules text.</p>`)).join("");
+}
+async function loadOracle(c) {
+  const name = c[NAME];
+  const url = c[ID] ? `https://api.scryfall.com/cards/${c[ID]}` : `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`;
+  let html;
+  try {
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(res.status);
+    html = oracleHtml(await res.json());
+    oracleCache.set(name, html);
+  } catch (e) {
+    html = `<p class="muted">Couldn't load the card text from Scryfall.</p>`;
+  }
+  const box = document.getElementById("oracle");
+  // Only fill it in if we're still on the same card.
+  if (box && document.title.startsWith(name + " · ")) box.innerHTML = html;
 }
 
 function homeView() {
